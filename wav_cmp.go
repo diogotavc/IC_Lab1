@@ -53,5 +53,5 @@ func main() {
 		runningTotal += diff * diff
 	}
 
-	fmt.Println("Mean squared error:", runningTotal*float64(numChannels)/float64(len(bufferModified.Data)))
+	fmt.Println("Mean squared error of channel averages:", runningTotal*float64(numChannels)/float64(len(bufferModified.Data)))
 }
