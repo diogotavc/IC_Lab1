@@ -8,18 +8,18 @@ import (
 )
 
 func main() {
-	fileAudio, err := os.Open(os.Args[1])
+	modifiedAudioFile, err := os.Open(os.Args[1])
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
-	fileOriginal, err := os.Open(os.Args[2])
+	originalAudioFile, err := os.Open(os.Args[2])
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
 
-	decoderAudio := wav.NewDecoder(fileAudio)
-	decoderOriginal := wav.NewDecoder(fileOriginal)
-	bufferAudio, err := decoderAudio.FullPCMBuffer()
+	decoderModified := wav.NewDecoder(modifiedAudioFile)
+	decoderOriginal := wav.NewDecoder(originalAudioFile)
+	bufferModified, err := decoderModified.FullPCMBuffer()
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
@@ -28,24 +28,24 @@ func main() {
 		panic(fmt.Sprintf("error: %v", err))
 	}
 
-	numChannelsAudio := bufferAudio.Format.NumChannels
-	if numChannelsAudio != bufferOriginal.Format.NumChannels {
+	numChannels := bufferModified.Format.NumChannels
+	if numChannels != bufferOriginal.Format.NumChannels {
 		panic("error: both files should have the same number of channels")
 	}
 
 	runningTotal := 0.0
-	for i := 0; i < len(bufferAudio.Data); i += numChannelsAudio {
-		averageAudio := 0.0
-		averageOriginal := 0.0
-		for j := 0; j < numChannelsAudio; j += 1 {
-			averageAudio += float64(bufferAudio.Data[i+j])
-			averageOriginal += float64(bufferOriginal.Data[i+j])
+	for i := 0; i < len(bufferModified.Data); i += numChannels {
+		totalModified := 0.0
+		totalOriginal := 0.0
+		for j := 0; j < numChannels; j += 1 {
+			totalModified += float64(bufferModified.Data[i+j])
+			totalOriginal += float64(bufferOriginal.Data[i+j])
 		}
-		averageAudio /= float64(numChannelsAudio)
-		averageOriginal /= float64(numChannelsAudio)
-		diff := averageOriginal - averageAudio
+		averageModified := totalModified / float64(numChannels)
+		averageOriginal := totalOriginal / float64(numChannels)
+		diff := averageModified - averageOriginal
 		runningTotal += diff * diff
 	}
 
-	fmt.Println("Mean squared error:", runningTotal*float64(numChannelsAudio)/float64(len(bufferAudio.Data)))
+	fmt.Println("Mean squared error:", runningTotal*float64(numChannels)/float64(len(bufferModified.Data)))
 }
