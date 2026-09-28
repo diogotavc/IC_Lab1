@@ -12,10 +12,12 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
+	defer modifiedAudioFile.Close()
 	originalAudioFile, err := os.Open(os.Args[2])
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
+	defer originalAudioFile.Close()
 
 	decoderModified := wav.NewDecoder(modifiedAudioFile)
 	decoderOriginal := wav.NewDecoder(originalAudioFile)
