@@ -35,6 +35,10 @@ func main() {
 		panic("error: both files should have the same number of channels")
 	}
 
+	if len(bufferModified.Data) != len(bufferOriginal.Data) {
+		panic("error: both files should have the same number of samples")
+	}
+
 	runningTotal := 0.0
 	for i := 0; i < len(bufferModified.Data); i += numChannels {
 		totalModified := 0.0
