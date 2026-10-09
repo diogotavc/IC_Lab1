@@ -30,6 +30,9 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
+	if decoder.BitDepth > 64 {
+		panic("bit depths larger than 64 are not supported")
+	}
 	minValue := (-1 << (decoder.BitDepth - 1))
 	maxValue := -(minValue + 1)
 
