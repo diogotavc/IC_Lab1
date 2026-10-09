@@ -28,20 +28,28 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
-
-	if buffer.Format.NumChannels != 2 {
-		panic("error: only stereo files supported")
+	if buffer.Format.NumChannels == 2 {
+		midHistogram := make(map[int]uint, 0)
+		sideHistogram := make(map[int]uint, 0)
+		for i := 0; i < len(buffer.Data); i += 2 {
+			left := (buffer.Data[i] >> bin_exp) << bin_exp
+			right := (buffer.Data[i + 1] >> bin_exp) << bin_exp
+			midHistogram[(left + right) / 2] += 1
+			sideHistogram[(left - right) / 2] += 1
+		}
+		fmt.Println(midHistogram)
+		fmt.Println(sideHistogram)
 	}
-
-	midHistogram := make(map[int]uint, 0)
-	sideHistogram := make(map[int]uint, 0)
-	for i := 0; i < len(buffer.Data); i += 2 {
-		left := (buffer.Data[i] >> bin_exp) << bin_exp
-		right := (buffer.Data[i+1] >> bin_exp) << bin_exp
-		midHistogram[(left+right)/2] += 1
-		sideHistogram[(left-right)/2] += 1
+	histograms := make([]map[int]uint, buffer.Format.NumChannels)
+	for n := range buffer.Format.NumChannels {
+		histograms[n] = make(map[int]uint, 0)
 	}
-
-	fmt.Println(midHistogram)
-	fmt.Println(sideHistogram)
+	for n := 0; n < len(buffer.Data); n += buffer.Format.NumChannels {
+		for c := range buffer.Format.NumChannels {
+			histograms[c][(buffer.Data[n + c] >> bin_exp) << bin_exp] += 1
+		}
+	}
+	for n := range buffer.Format.NumChannels {
+		fmt.Println(histograms[n])
+	}
 }
