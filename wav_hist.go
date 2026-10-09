@@ -14,9 +14,12 @@ func main() {
 		panic(fmt.Sprintf("error: %v", err))
 	}
 
-	bin_exp, err := strconv.Atoi(os.Args[2])
-	if err != nil {
-		panic(fmt.Sprintf("error: %v", err))
+	bin_exp := 0
+	if len(os.Args) >= 3 {
+		bin_exp, err = strconv.Atoi(os.Args[2])
+		if err != nil {
+			panic(fmt.Sprintf("error: %v", err))
+		}
 	}
 
 	decoder := wav.NewDecoder(file)
