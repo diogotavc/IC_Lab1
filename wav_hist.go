@@ -21,6 +21,7 @@ func main() {
 			panic(fmt.Sprintf("error: %v", err))
 		}
 	}
+	bin_mask := 1 << bin_exp - 1
 
 	decoder := wav.NewDecoder(file)
 
@@ -32,8 +33,8 @@ func main() {
 		midHistogram := make(map[int]uint, 0)
 		sideHistogram := make(map[int]uint, 0)
 		for i := 0; i < len(buffer.Data); i += 2 {
-			left := (buffer.Data[i] >> bin_exp) << bin_exp
-			right := (buffer.Data[i + 1] >> bin_exp) << bin_exp
+			left := buffer.Data[i] &^ bin_mask
+			right := buffer.Data[i + 1] &^ bin_mask
 			midHistogram[(left + right) / 2] += 1
 			sideHistogram[(left - right) / 2] += 1
 		}
@@ -46,7 +47,7 @@ func main() {
 	}
 	for n := 0; n < len(buffer.Data); n += buffer.Format.NumChannels {
 		for c := range buffer.Format.NumChannels {
-			histograms[c][(buffer.Data[n + c] >> bin_exp) << bin_exp] += 1
+			histograms[c][buffer.Data[n + c] &^ bin_mask] += 1
 		}
 	}
 	for n := range buffer.Format.NumChannels {

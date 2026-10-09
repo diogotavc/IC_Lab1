@@ -18,6 +18,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
+	bin_mask = 1 << bin_exp - 1
 
 	decoder := wav.NewDecoder(file)
 
@@ -31,8 +32,8 @@ func main() {
 	}
 
 	for i := 0; i < len(buffer.Data); i += 2 {
-		buffer.Data[i] = (buffer.Data[i] >> bin_exp) << bin_exp
-		buffer.Data[i+1] = (buffer.Data[i+1] >> bin_exp) << bin_exp
+		buffer.Data[i] = buffer.Data[i] &^ bin_mask
+		buffer.Data[i+1] = buffer.Data[i+1] &^ bin_mask
 	}
 	file, err = os.OpenFile("../example_w_bin.wav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
 
