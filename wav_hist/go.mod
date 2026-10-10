@@ -1,6 +1,6 @@
-module diogotavc/ic_lab1
+module diogotavc/IC_Lab1/wav_hist
 
-go 1.27.1
+go 1.27.2
 
 require github.com/go-audio/wav v1.1.0
 
