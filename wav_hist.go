@@ -77,10 +77,10 @@ func main() {
 		midHistogram := make(map[int]uint, 0)
 		sideHistogram := make(map[int]uint, 0)
 		for i := 0; i < len(buffer.Data); i += 2 {
-			left := buffer.Data[i] &^ bin_mask
-			right := buffer.Data[i + 1] &^ bin_mask
-			midHistogram[(left + right) / 2] += 1
-			sideHistogram[(left - right) / 2] += 1
+			left := buffer.Data[i]
+			right := buffer.Data[i + 1]
+			midHistogram[((left + right) / 2) &^ bin_mask] += 1
+			sideHistogram[((left - right) / 2) &^ bin_mask] += 1
 		}
 
 		value := minValue
