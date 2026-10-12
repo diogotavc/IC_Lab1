@@ -27,13 +27,10 @@ func main() {
 		panic(fmt.Sprintf("error: %v", err))
 	}
 
-	if buffer.Format.NumChannels != 2 {
-		panic("error: only stereo files supported")
-	}
-
-	for i := 0; i < len(buffer.Data); i += 2 {
-		buffer.Data[i] = buffer.Data[i] &^ bin_mask
-		buffer.Data[i+1] = buffer.Data[i+1] &^ bin_mask
+	for i := 0; i < len(buffer.Data); i += buffer.Format.NumChannels {
+		for c := range buffer.Format.NumChannels {
+			buffer.Data[i+c] &^= bin_mask
+		}
 	}
 	file, err = os.OpenFile("../example_w_bin.wav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
 
