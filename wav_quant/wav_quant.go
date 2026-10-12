@@ -18,7 +18,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
-	bin_mask = 1 << bin_exp - 1
+	bin_mask := 1 << bin_exp - 1
 
 	decoder := wav.NewDecoder(file)
 
