@@ -16,18 +16,20 @@ func echo(buffer audio.IntBuffer) audio.IntBuffer { //let me guess, maybe an ech
 		Data:           make([]int, len(buffer.Data)),
 		SourceBitDepth: buffer.SourceBitDepth,
 	}
-	for i := 2; i < len(buffer.Data); i += 2 {
-		bufferBuffer.Data[i] = buffer.Data[i] + buffer.Data[i-2]/2
-		bufferBuffer.Data[i+1] = buffer.Data[i+1] + buffer.Data[i-2]/2
+	for i := 0; i < len(buffer.Data); i += buffer.Format.NumChannels {
+		for c := range buffer.Format.NumChannels {
+			bufferBuffer.Data[i+c] = buffer.Data[i+c] + buffer.Data[i+c-2]/2
+		}
 	}
 	return bufferBuffer
 }
 
 func multiEcho(buffer audio.IntBuffer) audio.IntBuffer { //este é meio self explaining
 	dummyBuffer := buffer
-	for i := 2; i < len(buffer.Data); i += 2 {
-		dummyBuffer.Data[i] = dummyBuffer.Data[i] + dummyBuffer.Data[i-2]/2
-		dummyBuffer.Data[i+1] = dummyBuffer.Data[i+1] + dummyBuffer.Data[i-2]/2
+	for i := 0; i < len(buffer.Data); i += buffer.Format.NumChannels {
+		for c := range buffer.Format.NumChannels {
+			dummyBuffer.Data[i+c] = dummyBuffer.Data[i+c] + dummyBuffer.Data[i+c-2]/2
+		}
 	}
 	return dummyBuffer
 }
@@ -38,8 +40,9 @@ func ampMod(buffer audio.IntBuffer) audio.IntBuffer { //amplitude modulation
 		Data:           make([]int, len(buffer.Data)),
 		SourceBitDepth: buffer.SourceBitDepth,
 	}
-	for i := 0; i < len(buffer.Data); i += buffer.Format.NumChannels {
-		multiplier := math.Cos(float64(i))
+	for t := range len(buffer.Data) / buffer.Format.NumChannels {
+		i := t * buffer.Format.NumChannels
+		multiplier := math.Cos(float64(i / buffer.Format.NumChannels))
 		for c := range buffer.Format.NumChannels {
 			dummyBuffer.Data[i+c] = int(float64(buffer.Data[i+c]) * multiplier)
 		}
@@ -48,13 +51,16 @@ func ampMod(buffer audio.IntBuffer) audio.IntBuffer { //amplitude modulation
 }
 
 func tvd(buffer audio.IntBuffer) audio.IntBuffer { //time-varying delay
+	delay := len(buffer.Data)/10 * buffer.Format.NumChannels
 	dummyBuffer := audio.IntBuffer{
 		Format:         buffer.Format,
-		Data:           make([]int, len(buffer.Data)+len(buffer.Data)/10),
+		Data:           make([]int, len(buffer.Data)+delay),
 		SourceBitDepth: buffer.SourceBitDepth,
 	}
-	for i := 0; i < len(buffer.Data); i += 2 {
-		dummyBuffer.Data[i+len(buffer.Data)/10] = buffer.Data[i]
+	for i := 0; i < len(buffer.Data); i += buffer.Format.NumChannels {
+		for c := range buffer.Format.NumChannels {
+			dummyBuffer.Data[i+c+delay] = buffer.Data[i+c]
+		}
 	}
 	return dummyBuffer
 }
