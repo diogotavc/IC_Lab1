@@ -10,31 +10,44 @@ import (
 	"github.com/go-audio/wav"
 )
 
-func echo(buffer audio.IntBuffer) audio.IntBuffer { //let me guess, maybe an echo? well definitely a buffer
+func echo(buffer audio.IntBuffer, delay uint, coefficient float64) audio.IntBuffer { //let me guess, maybe an echo? well definitely a buffer
+	bufferLen := uint(len(buffer.Data))
+	numChannels := uint(buffer.Format.NumChannels)
+	delay *= numChannels
 	bufferBuffer := audio.IntBuffer{
 		Format:         buffer.Format,
-		Data:           make([]int, len(buffer.Data)),
+		Data:           make([]int, bufferLen+delay),
 		SourceBitDepth: buffer.SourceBitDepth,
 	}
-	for i := 0; i < len(buffer.Data); i += buffer.Format.NumChannels {
-		for c := range buffer.Format.NumChannels {
-			bufferBuffer.Data[i+c] = buffer.Data[i+c] + buffer.Data[i+c-2]/2
+	copy(bufferBuffer.Data, buffer.Data)
+	for i := uint(0); i < bufferLen; i += numChannels {
+		for c := range numChannels {
+			bufferBuffer.Data[i+c+delay] += int(float64(buffer.Data[i+c]) * coefficient)
 		}
 	}
 	return bufferBuffer
 }
 
-func multiEcho(buffer audio.IntBuffer) audio.IntBuffer { //este é meio self explaining
-	dummyBuffer := buffer
-	for i := 0; i < len(buffer.Data); i += buffer.Format.NumChannels {
-		for c := range buffer.Format.NumChannels {
-			dummyBuffer.Data[i+c] = dummyBuffer.Data[i+c] + dummyBuffer.Data[i+c-2]/2
+func multiEcho(buffer audio.IntBuffer, delay uint, coefficient float64) audio.IntBuffer { //este é meio self explaining
+	bufferLen := uint(len(buffer.Data))
+	numChannels := uint(buffer.Format.NumChannels)
+	delay *= numChannels
+	dummyBuffer := audio.IntBuffer{
+		Format: buffer.Format,
+		Data: make([]int, bufferLen+delay),
+		SourceBitDepth: buffer.SourceBitDepth,
+	}
+	copy(dummyBuffer.Data, buffer.Data)
+	for i := uint(0); i < bufferLen; i += numChannels {
+		for c := range numChannels {
+			dummyBuffer.Data[i+c+delay] += int(float64(dummyBuffer.Data[i+c])*coefficient)
 		}
 	}
 	return dummyBuffer
 }
 
-func ampMod(buffer audio.IntBuffer) audio.IntBuffer { //amplitude modulation
+func ampMod(buffer audio.IntBuffer, frequency float64) audio.IntBuffer { //amplitude modulation
+	frequency *= 2 * math.Pi / float64(buffer.Format.SampleRate)
 	dummyBuffer := audio.IntBuffer{
 		Format:         buffer.Format,
 		Data:           make([]int, len(buffer.Data)),
@@ -42,7 +55,7 @@ func ampMod(buffer audio.IntBuffer) audio.IntBuffer { //amplitude modulation
 	}
 	for t := range len(buffer.Data) / buffer.Format.NumChannels {
 		i := t * buffer.Format.NumChannels
-		multiplier := math.Cos(float64(i / buffer.Format.NumChannels))
+		multiplier := math.Sin(frequency * float64(t))
 		for c := range buffer.Format.NumChannels {
 			dummyBuffer.Data[i+c] = int(float64(buffer.Data[i+c]) * multiplier)
 		}
@@ -50,15 +63,17 @@ func ampMod(buffer audio.IntBuffer) audio.IntBuffer { //amplitude modulation
 	return dummyBuffer
 }
 
-func tvd(buffer audio.IntBuffer) audio.IntBuffer { //time-varying delay
-	delay := len(buffer.Data)/10 * buffer.Format.NumChannels
+func tvd(buffer audio.IntBuffer, delay uint) audio.IntBuffer { //time-varying delay
+	channels := uint(buffer.Format.NumChannels)
+	bufferLen := uint(len(buffer.Data))
+	delay = delay * channels
 	dummyBuffer := audio.IntBuffer{
 		Format:         buffer.Format,
-		Data:           make([]int, len(buffer.Data)+delay),
+		Data:           make([]int, bufferLen+delay),
 		SourceBitDepth: buffer.SourceBitDepth,
 	}
-	for i := 0; i < len(buffer.Data); i += buffer.Format.NumChannels {
-		for c := range buffer.Format.NumChannels {
+	for i := delay; i < bufferLen; i += channels {
+		for c := range channels {
 			dummyBuffer.Data[i+c+delay] = buffer.Data[i+c]
 		}
 	}
@@ -66,10 +81,12 @@ func tvd(buffer audio.IntBuffer) audio.IntBuffer { //time-varying delay
 }
 
 func main() {
-	echoFlag := flag.Bool("echo", false, "enable echo generation")
-	multiEchoFlag := flag.Bool("multiEcho", false, "enable multiecho generation")
-	ampModFlag := flag.Bool("ampMod", false, "enable amplitude modulation generation")
-	tvdFlag := flag.Bool("tvd", false, "enable time-varying delay generation")
+	echoDelayFlag := flag.Float64("echo", 0, "enable echo generation")
+	echoCoefficientFlag := flag.Float64("echoC", 0, "echo delay")
+	multiEchoDelayFlag := flag.Float64("multiEcho", 0, "enable multiecho generation")
+	multiEchoCoefficientFlag := flag.Float64("multiEchoC", 0, "multiple echo delay")
+	ampModFlag := flag.Float64("ampMod", 0, "enable amplitude modulation generation")
+	tvdFlag := flag.Int("tvd", 0, "number of samples to delay audio by")
 	flag.Parse()
 	file, err := os.Open(flag.Arg(0))
 
@@ -92,32 +109,50 @@ func main() {
 		panic(fmt.Sprintf("error: %v", err))
 	}
 
-	if *echoFlag {
-		echoBuffer := echo(*buffer)
-		file, err = os.OpenFile("echo.wav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
-		encoder := wav.NewEncoder(file, buffer.Format.SampleRate, buffer.SourceBitDepth, buffer.Format.NumChannels, int(decoder.WavAudioFormat))
-		encoder.Write(echoBuffer.AsIntBuffer())
-		encoder.Close()
+	if *echoDelayFlag > 0 {
+		if *echoCoefficientFlag == 0 {
+			fmt.Fprintln(os.Stderr, "echo coefficient must be given with echo delay")
+		} else {
+			sampleDelay := uint(*echoDelayFlag * float64(buffer.Format.SampleRate))
+			echoBuffer := echo(*buffer, sampleDelay, *echoCoefficientFlag)
+			file, err = os.OpenFile("echo.wav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
+			encoder := wav.NewEncoder(file, buffer.Format.SampleRate, buffer.SourceBitDepth, buffer.Format.NumChannels, int(decoder.WavAudioFormat))
+			encoder.Write(echoBuffer.AsIntBuffer())
+			encoder.Close()
+		}
+	} else if *echoDelayFlag < 0 {
+		fmt.Fprintln(os.Stderr, "echo delay must be positive")
+	} else if *echoCoefficientFlag != 0 {
+		fmt.Fprintln(os.Stderr, "echo coefficient should only be given with echo delay")
 	}
-	if *multiEchoFlag {
-		multiEchoBuffer := multiEcho(*buffer)
-		file, err = os.OpenFile("multiEcho.wav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
-		encoder := wav.NewEncoder(file, buffer.Format.SampleRate, buffer.SourceBitDepth, buffer.Format.NumChannels, int(decoder.WavAudioFormat))
-		encoder.Write(multiEchoBuffer.AsIntBuffer())
-		encoder.Close()
+	if *multiEchoDelayFlag > 0 {
+		if *multiEchoCoefficientFlag == 0 {
+			fmt.Fprintln(os.Stderr, "echo coefficient must be given with echo delay")
+		} else {
+			sampleDelay := uint(*multiEchoDelayFlag * float64(buffer.Format.SampleRate))
+			multiEchoBuffer := multiEcho(*buffer, sampleDelay, *multiEchoCoefficientFlag)
+			file, err = os.OpenFile("multiEcho.wav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
+			encoder := wav.NewEncoder(file, buffer.Format.SampleRate, buffer.SourceBitDepth, buffer.Format.NumChannels, int(decoder.WavAudioFormat))
+			encoder.Write(multiEchoBuffer.AsIntBuffer())
+			encoder.Close()
+		}
+	} else if *multiEchoDelayFlag < 0 {
+		fmt.Fprintln(os.Stderr, "multiple echo delay must be positive")
 	}
-	if *ampModFlag {
-		ampModBuffer := ampMod(*buffer)
+	if *ampModFlag != 0 {
+		ampModBuffer := ampMod(*buffer, *ampModFlag)
 		file, err = os.OpenFile("ampMod.wav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
 		encoder := wav.NewEncoder(file, buffer.Format.SampleRate, buffer.SourceBitDepth, buffer.Format.NumChannels, int(decoder.WavAudioFormat))
 		encoder.Write(ampModBuffer.AsIntBuffer())
 		encoder.Close()
 	}
-	if *tvdFlag {
-		tvdBuffer := tvd(*buffer)
+	if *tvdFlag > 0 {
+		tvdBuffer := tvd(*buffer, uint(*tvdFlag))
 		file, err = os.OpenFile("tvd.wav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
 		encoder := wav.NewEncoder(file, buffer.Format.SampleRate, buffer.SourceBitDepth, buffer.Format.NumChannels, int(decoder.WavAudioFormat))
 		encoder.Write(tvdBuffer.AsIntBuffer())
 		encoder.Close()
+	} else if *tvdFlag < 0 {
+		fmt.Fprintln(os.Stderr, "delay must not be less than 0")
 	}
 }
