@@ -41,22 +41,32 @@ func main() {
 
 	numFrames := len(buffer1.Data) / numChannels
 	squaredError := make([]float64, numChannels)
+	var squaredErrorAverage float64
 
 	for f := range numFrames {
+		var mix1, mix2 float64
 		for c := range numChannels {
-			err := float64(buffer1.Data[f*numChannels+c]) - float64(buffer2.Data[f*numChannels+c])
+			a := float64(buffer1.Data[f*numChannels+c])
+			b := float64(buffer2.Data[f*numChannels+c])
+
+			err := a - b
 			squaredError[c] += err * err
+
+			mix1 += a
+			mix2 += b
 		}
+		avgError := (mix1 - mix2) / float64(numChannels)
+		squaredErrorAverage += avgError * avgError
 	}
 
 	meanSE := make([]float64, numChannels)
 	for c := range numChannels {
 		meanSE[c] = squaredError[c] / float64(numFrames)
 	}
+	avgMSE := squaredErrorAverage / float64(numFrames)
 
-	var averageMSE float64
 	for c := range numChannels {
-		averageMSE += meanSE[c]
+		fmt.Printf("MSE (Channel %d): %f\n", c, meanSE[c])
 	}
-	averageMSE = averageMSE / float64(numChannels)
+	fmt.Printf("MSE (Average): %f\n", avgMSE)
 }
