@@ -8,50 +8,55 @@ import (
 )
 
 func main() {
-	modifiedAudioFile, err := os.Open(os.Args[1])
+	audio1, err := os.Open(os.Args[1])
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
-	defer modifiedAudioFile.Close()
-	originalAudioFile, err := os.Open(os.Args[2])
+	defer audio1.Close()
+	audio2, err := os.Open(os.Args[2])
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
-	defer originalAudioFile.Close()
+	defer audio2.Close()
 
-	decoderModified := wav.NewDecoder(modifiedAudioFile)
-	decoderOriginal := wav.NewDecoder(originalAudioFile)
-	bufferModified, err := decoderModified.FullPCMBuffer()
+	decoder1 := wav.NewDecoder(audio1)
+	decoder2 := wav.NewDecoder(audio2)
+	buffer1, err := decoder1.FullPCMBuffer()
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
-	bufferOriginal, err := decoderOriginal.FullPCMBuffer()
+	buffer2, err := decoder2.FullPCMBuffer()
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
 
-	numChannels := bufferModified.Format.NumChannels
-	if numChannels != bufferOriginal.Format.NumChannels {
+	numChannels := buffer1.Format.NumChannels
+	if numChannels != buffer2.Format.NumChannels {
 		panic("error: both files should have the same number of channels")
 	}
 
-	if len(bufferModified.Data) != len(bufferOriginal.Data) {
+	if len(buffer1.Data) != len(buffer2.Data) {
 		panic("error: both files should have the same number of samples")
 	}
 
-	runningTotal := 0.0
-	for i := 0; i < len(bufferModified.Data); i += numChannels {
-		totalModified := 0.0
-		totalOriginal := 0.0
-		for j := 0; j < numChannels; j += 1 {
-			totalModified += float64(bufferModified.Data[i+j])
-			totalOriginal += float64(bufferOriginal.Data[i+j])
+	numFrames := len(buffer1.Data) / numChannels
+	squaredError := make([]float64, numChannels)
+
+	for f := range numFrames {
+		for c := range numChannels {
+			err := float64(buffer1.Data[f*numChannels+c]) - float64(buffer2.Data[f*numChannels+c])
+			squaredError[c] += err * err
 		}
-		averageModified := totalModified / float64(numChannels)
-		averageOriginal := totalOriginal / float64(numChannels)
-		diff := averageModified - averageOriginal
-		runningTotal += diff * diff
 	}
 
-	fmt.Println("Mean squared error of channel averages:", runningTotal*float64(numChannels)/float64(len(bufferModified.Data)))
+	meanSE := make([]float64, numChannels)
+	for c := range numChannels {
+		meanSE[c] = squaredError[c] / float64(numFrames)
+	}
+
+	var averageMSE float64
+	for c := range numChannels {
+		averageMSE += meanSE[c]
+	}
+	averageMSE = averageMSE / float64(numChannels)
 }
