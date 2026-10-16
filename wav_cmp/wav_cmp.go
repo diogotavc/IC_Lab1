@@ -44,19 +44,17 @@ func main() {
 	var squaredErrorAverage float64
 
 	for f := range numFrames {
-		var mix1, mix2 float64
+		var monoError float64
 		for c := range numChannels {
 			a := float64(buffer1.Data[f*numChannels+c])
 			b := float64(buffer2.Data[f*numChannels+c])
 
 			err := a - b
+			monoError += err
 			squaredError[c] += err * err
-
-			mix1 += a
-			mix2 += b
 		}
-		avgError := (mix1 - mix2) / float64(numChannels)
-		squaredErrorAverage += avgError * avgError
+		monoError = monoError / float64(numChannels)
+		squaredErrorAverage += monoError * monoError
 	}
 
 	meanSE := make([]float64, numChannels)
