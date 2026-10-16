@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/go-audio/wav"
@@ -42,6 +43,8 @@ func main() {
 	numFrames := len(buffer1.Data) / numChannels
 	squaredError := make([]float64, numChannels)
 	var squaredErrorAverage float64
+	maxError := make([]float64, numChannels)
+	var maxErrorAverage float64
 
 	for f := range numFrames {
 		var monoError float64
@@ -52,9 +55,16 @@ func main() {
 			err := a - b
 			monoError += err
 			squaredError[c] += err * err
+
+			if m := math.Abs(err); m > maxError[c] {
+				maxError[c] = m
+			}
 		}
 		monoError = monoError / float64(numChannels)
 		squaredErrorAverage += monoError * monoError
+		if m := math.Abs(monoError); m > maxErrorAverage {
+			maxErrorAverage = m
+		}
 	}
 
 	meanSE := make([]float64, numChannels)
@@ -65,6 +75,8 @@ func main() {
 
 	for c := range numChannels {
 		fmt.Printf("MSE (Channel %d): %f\n", c, meanSE[c])
+		fmt.Printf("Max Error (Channel %d): %f\n", c, maxError[c])
 	}
 	fmt.Printf("MSE (Average): %f\n", avgMSE)
+	fmt.Printf("Max Error (Average): %f\n", maxErrorAverage)
 }
