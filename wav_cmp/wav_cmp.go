@@ -94,11 +94,14 @@ func main() {
 	snrMono := 10 * math.Log10(energyMono/squaredErrorMono)
 
 	for c := range numChannels {
-		fmt.Printf("MSE (Channel %d): %f\n", c, meanSE[c])
-		fmt.Printf("Max Error (Channel %d): %f\n", c, maxError[c])
-		fmt.Printf("SNR (Channel %d): %f\n", c, snRatio[c])
+		fmt.Printf("\033[1mChannel %d\033[0m\n", c)
+		fmt.Printf("MSE: %f\n", meanSE[c])
+		fmt.Printf("Max Error: %f\n", maxError[c])
+		fmt.Printf("SNR: %f\n", snRatio[c])
 	}
-	fmt.Printf("MSE (Mono): %f\n", mseMono)
-	fmt.Printf("Max Error (Mono): %f\n", maxErrorMono)
-	fmt.Printf("SNR (Mono): %f\n", snrMono)
+
+	fmt.Printf("\033[1mMono\033[0m\n")
+	fmt.Printf("MSE: %f\n", mseMono)
+	fmt.Printf("Max Error: %f\n", maxErrorMono)
+	fmt.Printf("SNR: %f\n", snrMono)
 }
