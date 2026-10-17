@@ -57,13 +57,13 @@ func main() {
 			a := float64(buffer1.Data[f*numChannels+c])
 			b := float64(buffer2.Data[f*numChannels+c])
 
-			err := a - b
-			monoError += err
+			diff := a - b
+			monoError += diff
 			monoOriginal += a
-			squaredError[c] += err * err
+			squaredError[c] += diff * diff
 			energy[c] += a * a
 
-			if m := math.Abs(err); m > maxError[c] {
+			if m := math.Abs(diff); m > maxError[c] {
 				maxError[c] = m
 			}
 		}
