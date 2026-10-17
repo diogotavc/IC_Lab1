@@ -9,6 +9,11 @@ import (
 )
 
 func main() {
+	if len(os.Args) != 3 {
+		fmt.Fprintf(os.Stderr, "usage: %s original.wav modified.wav\n", os.Args[0])
+		os.Exit(1)
+	}
+
 	audio1, err := os.Open(os.Args[1])
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
@@ -29,6 +34,9 @@ func main() {
 	buffer2, err := decoder2.FullPCMBuffer()
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
+	}
+	if decoder1.BitDepth != decoder2.BitDepth || decoder1.SampleRate != decoder2.SampleRate {
+		panic("error: files must have the same bit depth and sample rate")
 	}
 
 	numChannels := buffer1.Format.NumChannels
