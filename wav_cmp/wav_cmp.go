@@ -41,26 +41,35 @@ func main() {
 	}
 
 	numFrames := len(buffer1.Data) / numChannels
+
 	squaredError := make([]float64, numChannels)
 	var squaredErrorAverage float64
+
 	maxError := make([]float64, numChannels)
 	var maxErrorAverage float64
 
+	energy := make([]float64, numChannels)
+	var energyAverage float64
+
 	for f := range numFrames {
-		var monoError float64
+		var monoError, monoOriginal float64
 		for c := range numChannels {
 			a := float64(buffer1.Data[f*numChannels+c])
 			b := float64(buffer2.Data[f*numChannels+c])
 
 			err := a - b
 			monoError += err
+			monoOriginal += a
 			squaredError[c] += err * err
+			energy[c] += a * a
 
 			if m := math.Abs(err); m > maxError[c] {
 				maxError[c] = m
 			}
 		}
-		monoError = monoError / float64(numChannels)
+		monoError /= float64(numChannels)
+		monoOriginal /= float64(numChannels)
+		energyAverage += monoOriginal * monoOriginal
 		squaredErrorAverage += monoError * monoError
 		if m := math.Abs(monoError); m > maxErrorAverage {
 			maxErrorAverage = m
@@ -68,15 +77,20 @@ func main() {
 	}
 
 	meanSE := make([]float64, numChannels)
+	snRatio := make([]float64, numChannels)
 	for c := range numChannels {
 		meanSE[c] = squaredError[c] / float64(numFrames)
+		snRatio[c] = 10 * math.Log10(energy[c]/squaredError[c])
 	}
 	avgMSE := squaredErrorAverage / float64(numFrames)
+	avgSNR := 10 * math.Log10(energyAverage/squaredErrorAverage)
 
 	for c := range numChannels {
 		fmt.Printf("MSE (Channel %d): %f\n", c, meanSE[c])
 		fmt.Printf("Max Error (Channel %d): %f\n", c, maxError[c])
+		fmt.Printf("SNR (Channel %d): %f\n", c, snRatio[c])
 	}
 	fmt.Printf("MSE (Average): %f\n", avgMSE)
 	fmt.Printf("Max Error (Average): %f\n", maxErrorAverage)
+	fmt.Printf("SNR (Average): %f\n", avgSNR)
 }
