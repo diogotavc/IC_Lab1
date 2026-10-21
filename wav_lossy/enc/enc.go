@@ -4,15 +4,15 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
-	"math"
 	"os"
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
+	"github.com/zikichombo/dsp/dct"
 	// "github.com/zerfoo/float16"
 )
 
-const chunkSize = uint16(128)
+const chunkSize = uint16(8192)
 const samplesPerChunk = chunkSize
 const floatChunkSize = float64(chunkSize)
 
@@ -80,76 +80,38 @@ func main() {
 		panic(fmt.Sprintf("error while writing to output: %v", err))
 	}
 
-	cosineValuesLength := uint(chunkSize) * uint(chunkSize)
-	cosineValues := make([]float64, cosineValuesLength)
-	for f := range uint(chunkSize) {
-		for t := range uint(chunkSize) {
-			cosineValues[f*uint(chunkSize)+t] = math.Cos(float64(f) * (float64(t) + .5) * math.Pi / floatChunkSize)
-		}
-	}
-	fmt.Println(cosineValues)
-
 	bufferLen := chunkSize * uint16(numChannels)
-	floatZeroes := make([]float64, bufferLen)
 	buffer := audio.IntBuffer{
 		Format:         format,
 		Data:           make([]int, bufferLen),
 		SourceBitDepth: int(decoder.BitDepth),
 	}
-	channelCoefficients := make([][]float64, numChannels)
+	channelFloatBuffer := make([][]float64, numChannels)
 	for c := range numChannels {
-		channelCoefficients[c] = make([]float64, chunkSize)
+		channelFloatBuffer[c] = make([]float64, chunkSize)
 	}
+	transform := dct.New(int(chunkSize))
 	for {
 		samplesRead, err := decoder.PCMBuffer(&buffer)
-		// fmt.Println("read", samplesRead, "samples")
 		if err != nil {
 			panic(fmt.Sprintf("error while reading PCM buffer: %v", err))
 		}
 		if samplesRead == 0 {
 			break
 		}
-		for f := range uint(chunkSize) {
-			i := f * uint(chunkSize)
-			for t := range uint(chunkSize) {
-				// cosineValue := math.Cos(f * (float64(t) + 0.5) * math.Pi / floatChunkSize)
-				offset := uint(t) * uint(numChannels)
-				for c := range uint(numChannels) {
-					channelCoefficients[c][f] += float64(buffer.Data[offset+c]) * cosineValues[i+t]
-				}
+		for i := range uint(chunkSize) {
+			for c := range uint(numChannels) {
+				channelFloatBuffer[c][i] = float64(buffer.Data[i*uint(numChannels)+c])
 			}
 		}
-		for _, coefficients := range channelCoefficients {
-			// for _, coefficient := range coefficients {
-			// 	if err := binary.Write(writer, binary.LittleEndian, float16.FromFloat64(coefficient)); err != nil {
-			// 		panic(fmt.Sprintf("error writing to output: %v", err))
-			// 	}
-			// }
-			if err := binary.Write(writer, binary.LittleEndian, coefficients); err != nil {
+		for _, buffer := range channelFloatBuffer {
+			transform.Do(buffer)
+			if err := binary.Write(writer, binary.LittleEndian, buffer); err != nil {
 				panic(fmt.Sprintf("error writing to output: %v", err))
 			}
 		}
-		// fmt.Println(channelCoefficients)
-
-		// for f := range chunkSize {
-		// 	for c := range numChannels {
-		// 		for i := range chunkSize {
-		// 			t := float64(f) * (float64(i) + 0.5) * math.Pi / float64(chunkSize)
-		// 			coefficients[c][f] += float64(buffer.Data[i*numChannels+c]) * math.Cos(t)
-		// 		}
-		// 		coefficients[c][f] *= 2
-		// 		coefficients[c][f] /= float64(chunkSize)
-		// 	}
-		// }
-		// for c := range numChannels {
-		// 	coefficients[c][0] /= 2
-		// }
-		// fmt.Println(coefficients)
 		if uint(samplesRead) < uint(bufferLen) {
 			break
-		}
-		for _, coefficients := range channelCoefficients {
-			copy(coefficients, floatZeroes)
 		}
 	}
 }

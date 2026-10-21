@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
+	"github.com/zikichombo/dsp/dct"
 	// "github.com/zerfoo/float16"
 )
 
@@ -73,21 +74,14 @@ func main() {
 	if err := binary.Read(bufReader, binary.LittleEndian, &chunkSize); err != nil {
 		panic(fmt.Sprintf("error while reading chunk size: %v", err))
 	}
-	floatChunkSize := float64(chunkSize)
 	var samplesPerChunk uint16
 	if err := binary.Read(bufReader, binary.LittleEndian, &samplesPerChunk); err != nil {
 		panic(fmt.Sprintf("error while reading samples per chunk: %v", err))
 	}
 
-	// numberOfCompleteChunks := numFrames / uint64(samplesPerChunk)
-	// extraChunk := numFrames%uint64(samplesPerChunk) != 0
-	channelCoefficients := make([][]float64, numChannels)
-	for c := range channelCoefficients {
-		channelCoefficients[c] = make([]float64, chunkSize)
-	}
-	channelValues := make([][]float64, numChannels)
-	for c := range channelValues {
-		channelValues[c] = make([]float64, samplesPerChunk)
+	channelBuffer := make([][]float64, numChannels)
+	for c := range channelBuffer {
+		channelBuffer[c] = make([]float64, chunkSize)
 	}
 	outputBuffer := audio.IntBuffer{
 		Format: &audio.Format{
@@ -97,25 +91,17 @@ func main() {
 		Data:           make([]int, samplesPerChunk*numChannels),
 		SourceBitDepth: int(bitDepth),
 	}
-	// if numberOfChunks >= 1 {
 	framesRemaining := numFrames
+	transform := dct.New(int(chunkSize))
 	for ; framesRemaining >= uint64(samplesPerChunk); framesRemaining -= uint64(samplesPerChunk) {
-		for c, coefficients := range channelCoefficients {
-			if err := binary.Read(bufReader, binary.LittleEndian, coefficients); err != nil {
+		for c, buffer := range channelBuffer {
+			if err := binary.Read(bufReader, binary.LittleEndian, buffer); err != nil {
 				panic(fmt.Sprintf("error while reading channel %v coefficients: %v", c, err))
 			}
-			// fmt.Println(coefficients)
-			for i := range channelValues[c] {
-				channelValues[c][i] = coefficients[0] / floatChunkSize
-			}
-			for f, coefficient := range coefficients[1:] {
-				for t := range samplesPerChunk {
-					channelValues[c][t] += 2 * coefficient * math.Cos(float64(f+1)*(float64(t)+0.5)*math.Pi/floatChunkSize) / floatChunkSize
-				}
-			}
+			transform.Inv(buffer)
 		}
-		for c, values := range channelValues {
-			for t, value := range values {
+		for c, buffer := range channelBuffer {
+			for t, value := range buffer {
 				outputBuffer.Data[uint64(c)+uint64(t)*uint64(numChannels)] = int(math.Round(value))
 			}
 		}
@@ -126,27 +112,17 @@ func main() {
 	if framesRemaining > 0 {
 		fmt.Println("frames remaining", framesRemaining)
 		outputBuffer.Data = outputBuffer.Data[:framesRemaining*uint64(numChannels)]
-		for c, coefficients := range channelCoefficients {
-			if err := binary.Read(bufReader, binary.LittleEndian, coefficients); err != nil {
+		for c, buffer := range channelBuffer {
+			if err := binary.Read(bufReader, binary.LittleEndian, buffer); err != nil {
 				panic(fmt.Sprintf("error while reading channel %v coefficients: %v", c, err))
 			}
-			// fmt.Println(coefficients)
-			for i := range channelValues[c] {
-				channelValues[c][i] = coefficients[0] / floatChunkSize
-			}
-			for f, coefficient := range coefficients[1:] {
-				for t := range samplesPerChunk {
-					channelValues[c][t] += 2 * coefficient * math.Cos(float64(f+1)*(float64(t)+0.5)*math.Pi/floatChunkSize) / floatChunkSize
-				}
+			transform.Inv(buffer)
+		}
+		for c, buffer := range channelBuffer {
+			for t, value := range buffer[:framesRemaining] {
+				outputBuffer.Data[uint64(c)+uint64(t)*uint64(numChannels)] = int(math.Round(value))
 			}
 		}
-		fmt.Println(channelValues)
-		for c, values := range channelValues {
-			for t := range framesRemaining {
-				outputBuffer.Data[uint64(c)+uint64(t)*uint64(numChannels)] = int(math.Round(values[t]))
-			}
-		}
-		fmt.Println(outputBuffer)
 		if err := encoder.Write(&outputBuffer); err != nil {
 			panic(fmt.Sprintf("error while writing to output file: %v", err))
 		}
