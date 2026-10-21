@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
+	"github.com/zerfoo/float16"
 	"github.com/zikichombo/dsp/dct"
-	// "github.com/zerfoo/float16"
 )
 
 func main() {
@@ -74,6 +74,7 @@ func main() {
 	if err := binary.Read(bufReader, binary.LittleEndian, &chunkSize); err != nil {
 		panic(fmt.Sprintf("error while reading chunk size: %v", err))
 	}
+	floatChunkSize := float64(chunkSize)
 	var samplesPerChunk uint16
 	if err := binary.Read(bufReader, binary.LittleEndian, &samplesPerChunk); err != nil {
 		panic(fmt.Sprintf("error while reading samples per chunk: %v", err))
@@ -86,8 +87,8 @@ func main() {
 	for c := range channelBuffer {
 		channelBuffer[c] = make([]float64, samplesPerChunk)
 	}
-	inputBuffer := make([]float32, chunkSize)
-	remainingZeros := make([]float64, samplesPerChunk - chunkSize)
+	inputBuffer := make([]float16.Float16, chunkSize)
+	remainingZeros := make([]float64, samplesPerChunk-chunkSize)
 	outputBuffer := audio.IntBuffer{
 		Format: &audio.Format{
 			NumChannels: int(numChannels),
@@ -103,8 +104,9 @@ func main() {
 			if err := binary.Read(bufReader, binary.LittleEndian, inputBuffer); err != nil {
 				panic(fmt.Sprintf("error while reading channel %v coefficients: %v", c, err))
 			}
-			for i, value := range inputBuffer {
-				buffer[i] = float64(value)
+			buffer[0] = inputBuffer[0].ToFloat64() * floatChunkSize
+			for i, value := range inputBuffer[1:] {
+				buffer[i+1] = value.ToFloat64() * floatChunkSize / 2
 			}
 			copy(buffer[chunkSize:], remainingZeros)
 			transform.Inv(buffer)
@@ -125,8 +127,9 @@ func main() {
 			if err := binary.Read(bufReader, binary.LittleEndian, inputBuffer); err != nil {
 				panic(fmt.Sprintf("error while reading channel %v coefficients: %v", c, err))
 			}
-			for i, value := range inputBuffer {
-				buffer[i] = float64(value)
+			buffer[0] = inputBuffer[0].ToFloat64() * floatChunkSize
+			for i, value := range inputBuffer[1:] {
+				buffer[i+1] = value.ToFloat64() * floatChunkSize / 2
 			}
 			copy(buffer[chunkSize:], remainingZeros)
 			transform.Inv(buffer)

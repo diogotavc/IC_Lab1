@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	// "github.com/zerfoo/float16"
+	"github.com/zerfoo/float16"
 )
 
 func main() {
@@ -53,9 +53,9 @@ func main() {
 		numberOfChunks += 1
 	}
 
-	channelCoefficients := make([][]float32, numChannels)
+	channelCoefficients := make([][]float16.Float16, numChannels)
 	for c := range channelCoefficients {
-		channelCoefficients[c] = make([]float32, chunkSize)
+		channelCoefficients[c] = make([]float16.Float16, chunkSize)
 	}
 	for range numberOfChunks {
 		for c := range channelCoefficients {

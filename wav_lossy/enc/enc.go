@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
+	"github.com/zerfoo/float16"
 	"github.com/zikichombo/dsp/dct"
-	// "github.com/zerfoo/float16"
 )
 
 const chunkSize = uint16(8)
@@ -90,7 +90,6 @@ func main() {
 	for c := range numChannels {
 		channelFloatBuffer[c] = make([]float64, chunkSize)
 	}
-	outputBuffer := make([]float32, coefficientsKept)
 	transform := dct.New(int(chunkSize))
 	for {
 		samplesRead, err := decoder.PCMBuffer(&buffer)
@@ -107,10 +106,11 @@ func main() {
 		}
 		for _, buffer := range channelFloatBuffer {
 			transform.Do(buffer)
-			for i, value := range buffer[:coefficientsKept] {
-				outputBuffer[i] = float32(value)
+			buffer[0] /= floatChunkSize
+			for i, value := range buffer[1:] {
+				buffer[i+1] = value * 2 / floatChunkSize
 			}
-			if err := binary.Write(writer, binary.LittleEndian, outputBuffer); err != nil {
+			if err := binary.Write(writer, binary.LittleEndian, float16.FromSlice64(buffer[:coefficientsKept])); err != nil {
 				panic(fmt.Sprintf("error writing to output: %v", err))
 			}
 		}
