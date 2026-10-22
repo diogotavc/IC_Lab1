@@ -13,7 +13,7 @@ import (
 )
 
 const chunkSize = uint16(8192)
-const samplesPerChunk = chunkSize
+const coefficientsKept = uint16(8192)
 const floatChunkSize = float64(chunkSize)
 
 func main() {
@@ -73,14 +73,14 @@ func main() {
 	if err := binary.Write(writer, binary.LittleEndian, numFrames); err != nil {
 		panic(fmt.Sprintf("error writing to output: %v", err))
 	}
-	if err := binary.Write(writer, binary.LittleEndian, uint16(chunkSize)); err != nil {
+	if err := binary.Write(writer, binary.LittleEndian, coefficientsKept); err != nil {
 		panic(fmt.Sprintf("error writing to output: %v", err))
 	}
-	if err := binary.Write(writer, binary.LittleEndian, samplesPerChunk); err != nil {
+	if err := binary.Write(writer, binary.LittleEndian, chunkSize); err != nil {
 		panic(fmt.Sprintf("error while writing to output: %v", err))
 	}
 
-	bufferLen := chunkSize * uint16(numChannels)
+	bufferLen := uint(chunkSize) * uint(numChannels)
 	buffer := audio.IntBuffer{
 		Format:         format,
 		Data:           make([]int, bufferLen),
@@ -106,7 +106,7 @@ func main() {
 		}
 		for _, buffer := range channelFloatBuffer {
 			transform.Do(buffer)
-			if err := binary.Write(writer, binary.LittleEndian, buffer); err != nil {
+			if err := binary.Write(writer, binary.LittleEndian, buffer[:coefficientsKept]); err != nil {
 				panic(fmt.Sprintf("error writing to output: %v", err))
 			}
 		}

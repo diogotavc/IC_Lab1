@@ -78,26 +78,31 @@ func main() {
 	if err := binary.Read(bufReader, binary.LittleEndian, &samplesPerChunk); err != nil {
 		panic(fmt.Sprintf("error while reading samples per chunk: %v", err))
 	}
+	if chunkSize > samplesPerChunk {
+		panic(fmt.Sprintf("a chunk should generate at least %v samples, file has %v samples per chunk", chunkSize, samplesPerChunk))
+	}
 
 	channelBuffer := make([][]float64, numChannels)
 	for c := range channelBuffer {
-		channelBuffer[c] = make([]float64, chunkSize)
+		channelBuffer[c] = make([]float64, samplesPerChunk)
 	}
+	remainingZeros := make([]float64, samplesPerChunk - chunkSize)
 	outputBuffer := audio.IntBuffer{
 		Format: &audio.Format{
 			NumChannels: int(numChannels),
 			SampleRate:  int(samplingRate),
 		},
-		Data:           make([]int, samplesPerChunk*numChannels),
+		Data:           make([]int, uint(samplesPerChunk)*uint(numChannels)),
 		SourceBitDepth: int(bitDepth),
 	}
 	framesRemaining := numFrames
-	transform := dct.New(int(chunkSize))
+	transform := dct.New(int(samplesPerChunk))
 	for ; framesRemaining >= uint64(samplesPerChunk); framesRemaining -= uint64(samplesPerChunk) {
 		for c, buffer := range channelBuffer {
-			if err := binary.Read(bufReader, binary.LittleEndian, buffer); err != nil {
+			if err := binary.Read(bufReader, binary.LittleEndian, buffer[:chunkSize]); err != nil {
 				panic(fmt.Sprintf("error while reading channel %v coefficients: %v", c, err))
 			}
+			copy(buffer[chunkSize:], remainingZeros)
 			transform.Inv(buffer)
 		}
 		for c, buffer := range channelBuffer {
@@ -113,9 +118,10 @@ func main() {
 		fmt.Println("frames remaining", framesRemaining)
 		outputBuffer.Data = outputBuffer.Data[:framesRemaining*uint64(numChannels)]
 		for c, buffer := range channelBuffer {
-			if err := binary.Read(bufReader, binary.LittleEndian, buffer); err != nil {
+			if err := binary.Read(bufReader, binary.LittleEndian, buffer[:chunkSize]); err != nil {
 				panic(fmt.Sprintf("error while reading channel %v coefficients: %v", c, err))
 			}
+			copy(buffer[chunkSize:], remainingZeros)
 			transform.Inv(buffer)
 		}
 		for c, buffer := range channelBuffer {

@@ -38,8 +38,6 @@ func main() {
 	if err := binary.Read(bufReader, binary.LittleEndian, &numFrames); err != nil {
 		panic(fmt.Sprintf("error while reading number of frame: %v", err))
 	}
-	fmt.Printf("Channels: %v\nBit depth: %v\nSampling rate: %v\nNumber of frames: %v\n", numChannels, bitDepth, samplingRate, numFrames)
-
 	var chunkSize uint16
 	if err := binary.Read(bufReader, binary.LittleEndian, &chunkSize); err != nil {
 		panic(fmt.Sprintf("error while reading chunk size: %v", err))
@@ -48,6 +46,8 @@ func main() {
 	if err := binary.Read(bufReader, binary.LittleEndian, &samplesPerChunk); err != nil {
 		panic(fmt.Sprintf("error while reading samples per chunk: %v", err))
 	}
+	fmt.Printf("Channels: %v\nBit depth: %v\nSampling rate: %v\nNumber of frames: %v\nNumber of coefficients in chunk: %v\nNumber of samples per chunks: %v\n", numChannels, bitDepth, samplingRate, numFrames, chunkSize, samplesPerChunk)
+
 	numberOfChunks := numFrames / uint64(samplesPerChunk)
 	if numFrames%uint64(samplesPerChunk) != 0 {
 		numberOfChunks += 1
