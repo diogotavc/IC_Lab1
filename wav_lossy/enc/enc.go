@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/go-audio/audio"
@@ -12,8 +13,8 @@ import (
 	// "github.com/zerfoo/float16"
 )
 
-const chunkSize = uint16(8)
-const coefficientsKept = uint16(8)
+const chunkSize = uint16(8192)
+const coefficientsKept = uint16(8192)
 const floatChunkSize = float64(chunkSize)
 
 func main() {
@@ -108,7 +109,7 @@ func main() {
 		for _, buffer := range channelFloatBuffer {
 			transform.Do(buffer)
 			for i, value := range buffer[:coefficientsKept] {
-				outputBuffer[i] = float32(value)
+				outputBuffer[i] = float32(math.Round(value))
 			}
 			if err := binary.Write(writer, binary.LittleEndian, outputBuffer); err != nil {
 				panic(fmt.Sprintf("error writing to output: %v", err))
