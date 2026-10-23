@@ -12,8 +12,8 @@ import (
 	// "github.com/zerfoo/float16"
 )
 
-const chunkSize = uint16(8192)
-const coefficientsKept = uint16(8192)
+const chunkSize = uint16(8)
+const coefficientsKept = uint16(8)
 const floatChunkSize = float64(chunkSize)
 
 func main() {
@@ -90,6 +90,7 @@ func main() {
 	for c := range numChannels {
 		channelFloatBuffer[c] = make([]float64, chunkSize)
 	}
+	outputBuffer := make([]float32, coefficientsKept)
 	transform := dct.New(int(chunkSize))
 	for {
 		samplesRead, err := decoder.PCMBuffer(&buffer)
@@ -106,7 +107,10 @@ func main() {
 		}
 		for _, buffer := range channelFloatBuffer {
 			transform.Do(buffer)
-			if err := binary.Write(writer, binary.LittleEndian, buffer[:coefficientsKept]); err != nil {
+			for i, value := range buffer[:coefficientsKept] {
+				outputBuffer[i] = float32(value)
+			}
+			if err := binary.Write(writer, binary.LittleEndian, outputBuffer); err != nil {
 				panic(fmt.Sprintf("error writing to output: %v", err))
 			}
 		}

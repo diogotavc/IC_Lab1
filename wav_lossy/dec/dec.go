@@ -86,6 +86,7 @@ func main() {
 	for c := range channelBuffer {
 		channelBuffer[c] = make([]float64, samplesPerChunk)
 	}
+	inputBuffer := make([]float32, chunkSize)
 	remainingZeros := make([]float64, samplesPerChunk - chunkSize)
 	outputBuffer := audio.IntBuffer{
 		Format: &audio.Format{
@@ -99,8 +100,11 @@ func main() {
 	transform := dct.New(int(samplesPerChunk))
 	for ; framesRemaining >= uint64(samplesPerChunk); framesRemaining -= uint64(samplesPerChunk) {
 		for c, buffer := range channelBuffer {
-			if err := binary.Read(bufReader, binary.LittleEndian, buffer[:chunkSize]); err != nil {
+			if err := binary.Read(bufReader, binary.LittleEndian, inputBuffer); err != nil {
 				panic(fmt.Sprintf("error while reading channel %v coefficients: %v", c, err))
+			}
+			for i, value := range inputBuffer {
+				buffer[i] = float64(value)
 			}
 			copy(buffer[chunkSize:], remainingZeros)
 			transform.Inv(buffer)
@@ -118,8 +122,11 @@ func main() {
 		fmt.Println("frames remaining", framesRemaining)
 		outputBuffer.Data = outputBuffer.Data[:framesRemaining*uint64(numChannels)]
 		for c, buffer := range channelBuffer {
-			if err := binary.Read(bufReader, binary.LittleEndian, buffer[:chunkSize]); err != nil {
+			if err := binary.Read(bufReader, binary.LittleEndian, inputBuffer); err != nil {
 				panic(fmt.Sprintf("error while reading channel %v coefficients: %v", c, err))
+			}
+			for i, value := range inputBuffer {
+				buffer[i] = float64(value)
 			}
 			copy(buffer[chunkSize:], remainingZeros)
 			transform.Inv(buffer)

@@ -53,9 +53,9 @@ func main() {
 		numberOfChunks += 1
 	}
 
-	channelCoefficients := make([][]float64, numChannels)
+	channelCoefficients := make([][]float32, numChannels)
 	for c := range channelCoefficients {
-		channelCoefficients[c] = make([]float64, chunkSize)
+		channelCoefficients[c] = make([]float32, chunkSize)
 	}
 	for range numberOfChunks {
 		for c := range channelCoefficients {
