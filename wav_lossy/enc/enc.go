@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"slices"
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
@@ -91,7 +92,7 @@ func main() {
 	for c := range numChannels {
 		channelFloatBuffer[c] = make([]float64, chunkSize)
 	}
-	outputBuffer := make([]float32, coefficientsKept)
+	outputBuffer := make([]int32, coefficientsKept)
 	transform := dct.New(int(chunkSize))
 	for {
 		samplesRead, err := decoder.PCMBuffer(&buffer)
@@ -109,10 +110,30 @@ func main() {
 		for _, buffer := range channelFloatBuffer {
 			transform.Do(buffer)
 			for i, value := range buffer[:coefficientsKept] {
-				outputBuffer[i] = float32(math.Round(value))
+				outputBuffer[i] = int32(math.Round(value))
 			}
-			if err := binary.Write(writer, binary.LittleEndian, outputBuffer); err != nil {
-				panic(fmt.Sprintf("error writing to output: %v", err))
+			// if err := binary.Write(writer, binary.LittleEndian, outputBuffer); err != nil {
+			// 	panic(fmt.Sprintf("error writing to output: %v", err))
+			// }
+			absMax := slices.Max(outputBuffer)
+			if absMax < 0 {
+				absMax = -absMax
+			}
+			absMin := slices.Min(outputBuffer)
+			if absMin < 0 {
+				absMin = -absMin
+			}
+			max := max(absMax, absMin)
+			if err := binary.Write(writer, binary.LittleEndian, max); err != nil {
+				panic(fmt.Sprintf("error while writing mutliplier value to output: %v\n", err))
+			}
+			floatMax := float64(max)
+			// floatMin := float64(min)
+			// fmt.Println("max:", max)
+			for _, value := range outputBuffer {
+				quantized := int8(math.Round(float64(value) * 127 / floatMax))
+				// fmt.Println("real value:", buffer[i], "value:", value, "quantized:", quantized, "dequantized: ", float64(int32(quantized) * max)/127)
+				writer.WriteByte(byte(quantized))
 			}
 		}
 		if uint(samplesRead) < uint(bufferLen) {

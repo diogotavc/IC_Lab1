@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"slices"
 
 	// "github.com/zerfoo/float16"
 )
@@ -53,16 +54,20 @@ func main() {
 		numberOfChunks += 1
 	}
 
-	channelCoefficients := make([][]float32, numChannels)
-	for c := range channelCoefficients {
-		channelCoefficients[c] = make([]float32, chunkSize)
-	}
+	coefficients := make([]int8, chunkSize)
 	for range numberOfChunks {
-		for c := range channelCoefficients {
-			if err := binary.Read(bufReader, binary.LittleEndian, channelCoefficients[c]); err != nil {
+		for c := range numChannels {
+			var multiplier int32
+			if err := binary.Read(bufReader, binary.LittleEndian, &multiplier); err != nil {
+				panic(fmt.Sprintf("error while reading multiplier: %v\n", err))
+			}
+			if err := binary.Read(bufReader, binary.LittleEndian, coefficients); err != nil {
 				panic(fmt.Sprintf("error while reading channel %v coefficients: %v", c, err))
 			}
+			maxCoefficient := slices.Max(coefficients)
+			minCoefficient := slices.Min(coefficients)
+			fmt.Printf("Multiplier: %v Min coefficient: %v Max coefficient: %v\n", multiplier, minCoefficient, maxCoefficient)
+			fmt.Println(coefficients)
 		}
-		fmt.Println(channelCoefficients)
 	}
 }
