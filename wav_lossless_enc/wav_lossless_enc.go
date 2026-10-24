@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/go-audio/audio"
@@ -56,22 +57,18 @@ func differentialCoding(buffer audio.IntBuffer) audio.IntBuffer { //differential
 		SourceBitDepth: buffer.SourceBitDepth,
 	}
 	copy(bufferBuffer.Data, buffer.Data)
-	for i := uint(1); i < bufferLen; i += numChannels {
-		bufferBuffer.Data[i] -= buffer.Data[i+numChannels]
+	for i := bufferLen - 1; i >= numChannels; i-- {
+		bufferBuffer.Data[i] -= buffer.Data[i-numChannels]
 	}
 	return bufferBuffer
 }
 
-func encoderTree(tokens []Token) *BinaryTreeNode { //lz77 compression method :)
+func encoderTree(bufferData []int) *BinaryTreeNode { //lz77 compression method :)
 
 	counter := make(map[int]uint)
 
-	for _, token := range tokens {
-		if token.IsLiteral {
-			counter[token.Literal]++
-			continue
-		}
-		counter[token.Pointer]++
+	for _, num := range bufferData {
+		counter[num]++
 	}
 
 	pq := &NodePriorityQueue{}
@@ -126,31 +123,58 @@ func findNodePath(node *BinaryTreeNode, target int, path, pathLength uint) (uint
 	return 0, 0, false
 }
 
-func huffmanMethod(tokens []Token, node *BinaryTreeNode) uint {
-	var result uint
-	var path uint
-	var pathLength uint
-	var found bool
-	fmt.Printf("tokens len: %d\n", len(tokens))
-	for index, token := range tokens {
-		if token.IsLiteral {
-			path, pathLength, found = findNodePath(node, token.Literal, 0, 0)
-			fmt.Printf("Path: %d -> Token: %d\n", path, token.Literal)
-		} else {
-			path, pathLength, found = findNodePath(node, token.Pointer, 0, 0)
-			fmt.Printf("Path: %d -> Token: %d\n", path, token.Pointer)
-		}
+func huffmanMethod(bufferData []int, node *BinaryTreeNode) []byte { //helped by AI to change from bitwise to bytewise for a better storage method ([]byte)
+	var result []byte
+	var currentByte byte
+	var bitsFilled uint
+
+	for index, sample := range bufferData {
+		path, pathLength, found := findNodePath(node, sample, 0, 0)
+
 		if found {
-			result = (result << pathLength) | path
+			for i := int(pathLength) - 1; i >= 0; i-- {
+				bit := byte((path >> i) & 1)
+				currentByte = (currentByte << 1) | bit
+				bitsFilled++
+
+				if bitsFilled == 8 {
+					result = append(result, currentByte)
+					currentByte = 0
+					bitsFilled = 0
+				}
+			}
 		}
-		fmt.Printf("Way done: %d\n", index*100/len(tokens))
+
+		if index%1000 == 0 {
+			fmt.Printf("Progress: %d%%\n", index*100/len(bufferData))
+		}
 	}
+
+	if bitsFilled > 0 {
+		currentByte = currentByte << (8 - bitsFilled)
+		result = append(result, currentByte)
+	}
+
 	return result
 }
 
+func bufferSlicing(bufferData []int) [][]int {
+	var blocks [][]int
+	blockSize := 4096
+	blockNumber := int(math.Floor(float64(len(bufferData) / blockSize)))
+	for i := 0; i <= blockNumber; i += blockSize {
+		if i != blockNumber {
+			blocks = append(blocks, bufferData[i:i+blockSize])
+			continue
+		}
+		blocks = append(blocks, bufferData[i:i+(len(bufferData)-blockNumber*blockSize)])
+	}
+	return blocks
+}
+
 func main() {
-	differentialCodingFlag := flag.Bool("differentialCoding", false, "enable differential coding before LZ77 compression")
-	// echoCoefficientFlag := flag.Float64("echoC", 0, "echo delay")
+	differentialCodingFlag := flag.Bool("differential", false, "enable differential coding before LZ77 compression")
+	blockFlag := flag.Bool("slicing", false, "enable block slicing the buffer")
 	flag.Parse()
 	file, err := os.Open(flag.Arg(0))
 
@@ -170,16 +194,45 @@ func main() {
 	}
 
 	var rootNode *BinaryTreeNode
-	var lzssTokens []Token
+	var encodedBytes []byte
+	var blocks [][]int
 	if *differentialCodingFlag {
-		differentialBuffer := differentialCoding(*buffer)
-		lzssTokens = lzssEncode(differentialBuffer)
+		if *blockFlag {
+			differentialBuffer := differentialCoding(*buffer)
+			blocks = bufferSlicing(differentialBuffer.Data)
+			for _, block := range blocks {
+				rootNode = encoderTree(block)
+				encodedBytes = append(encodedBytes, huffmanMethod(block, rootNode)...)
+			}
+			fmt.Println(encodedBytes)
+			fmt.Println(len(encodedBytes))
+			fmt.Println(len(buffer.Data))
+		} else {
+			differentialBuffer := differentialCoding(*buffer)
+			rootNode = encoderTree(differentialBuffer.Data)
+			encodedBytes = huffmanMethod(differentialBuffer.Data, rootNode)
+			fmt.Println(encodedBytes)
+			fmt.Println(len(encodedBytes))
+			fmt.Println(len(buffer.Data))
+		}
 	} else {
-		lzssTokens = lzssEncode(*buffer)
+		if *blockFlag {
+			blocks = bufferSlicing(buffer.Data)
+			for _, block := range blocks {
+				rootNode = encoderTree(block)
+				encodedBytes = append(encodedBytes, huffmanMethod(block, rootNode)...)
+			}
+			fmt.Println(encodedBytes)
+			fmt.Println(len(encodedBytes))
+			fmt.Println(len(buffer.Data))
+		} else {
+			rootNode = encoderTree(buffer.Data)
+			encodedBytes = huffmanMethod(buffer.Data, rootNode)
+			fmt.Println(encodedBytes)
+			fmt.Println(len(encodedBytes))
+			fmt.Println(len(buffer.Data))
+		}
 	}
-	rootNode = encoderTree(lzssTokens)
-	fmt.Println(huffmanMethod(lzssTokens, rootNode))
-	//fmt.Println(encoderDict)
 	// file, err = os.OpenFile("thisistheaudiofileaftertheencoder.txt", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666) //titafate iykyk
 	// encoder := wav.NewEncoder(file, buffer.Format.SampleRate, buffer.SourceBitDepth, buffer.Format.NumChannels, int(decoder.WavAudioFormat))
 	// encoder.Write(finalBuffer.AsIntBuffer())
