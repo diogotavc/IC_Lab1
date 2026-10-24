@@ -73,7 +73,7 @@ func encoderTree(buffer audio.IntBuffer) *BinaryTreeNode { //lz77 compression me
 	pq := &NodePriorityQueue{}
 	heap.Init(pq)
 	for num, count := range counter {
-		heap.Push(pq, NodeItem{
+		heap.Push(pq, &NodeItem{
 			node: &BinaryTreeNode{
 				isLeaf: true,
 				value:  num,
@@ -82,8 +82,8 @@ func encoderTree(buffer audio.IntBuffer) *BinaryTreeNode { //lz77 compression me
 		})
 	}
 	for pq.Len() > 1 {
-		leftItem := heap.Pop(pq).(NodeItem)
-		rightItem := heap.Pop(pq).(NodeItem)
+		leftItem := heap.Pop(pq).(*NodeItem)
+		rightItem := heap.Pop(pq).(*NodeItem)
 
 		parentNode := &BinaryTreeNode{
 			isLeaf: false,
@@ -91,7 +91,7 @@ func encoderTree(buffer audio.IntBuffer) *BinaryTreeNode { //lz77 compression me
 			right:  rightItem.node,
 		}
 
-		heap.Push(pq, NodeItem{
+		heap.Push(pq, &NodeItem{
 			node:  parentNode,
 			count: leftItem.count + rightItem.count,
 		})
@@ -100,11 +100,40 @@ func encoderTree(buffer audio.IntBuffer) *BinaryTreeNode { //lz77 compression me
 	if pq.Len() == 0 {
 		return nil
 	}
-	return heap.Pop(pq).(NodeItem).node
+	return heap.Pop(pq).(*NodeItem).node
+}
+
+func findNodePath(node *BinaryTreeNode, target int, path, pathLength uint) (uint, uint, bool) {
+	if node == nil {
+		return 0, 0, false
+	}
+	if node.isLeaf {
+		return path, pathLength, node.value == target
+	}
+
+	if leftPath, leftLength, found := findNodePath(node.left, target, path<<1, pathLength+1); found {
+		return leftPath, leftLength, true
+	}
+
+	if rightPath, rightLength, found := findNodePath(node.right, target, path<<1|1, pathLength+1); found {
+		return rightPath, rightLength, true
+	}
+
+	return 0, 0, false
 }
 
 func huffmanMethod(buffer audio.IntBuffer, node *BinaryTreeNode) uint {
-	return 1
+	var result uint
+	fmt.Printf("Buffer len: %d\n", len(buffer.Data))
+	for index, sample := range buffer.Data {
+		path, pathLength, found := findNodePath(node, sample, 0, 0)
+		fmt.Printf("Path: %d -> Sample: %d\n", path, sample)
+		if found {
+			result = (result << pathLength) | path
+		}
+		fmt.Printf("Way done: %d\n", index*100/len(buffer.Data))
+	}
+	return result
 }
 
 func main() {
@@ -126,10 +155,6 @@ func main() {
 
 	if buffer.Format.NumChannels != 2 {
 		panic("error: only stereo files supported")
-	}
-
-	if err != nil {
-		panic(fmt.Sprintf("error: %v", err))
 	}
 
 	var rootNode *BinaryTreeNode
