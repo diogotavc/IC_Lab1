@@ -5,6 +5,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+
+	"github.com/go-audio/audio"
+	"github.com/go-audio/wav"
 )
 
 const (
@@ -100,6 +103,25 @@ func main() {
 		for i := uint64(numChannels); i < totalSamples; i++ {
 			samples[i] += samples[i-uint64(numChannels)]
 		}
+	}
+
+	encoder := wav.NewEncoder(outputFile, int(samplingRate), int(bitDepth), int(numChannels), 1)
+	defer func() {
+		if err := encoder.Close(); err != nil {
+			panic(fmt.Sprintf("error while closing encoder: %v", err))
+		}
+	}()
+
+	outputBuffer := audio.IntBuffer{
+		Format: &audio.Format{
+			NumChannels: int(numChannels),
+			SampleRate:  int(samplingRate),
+		},
+		Data:           samples,
+		SourceBitDepth: int(bitDepth),
+	}
+	if err := encoder.Write(&outputBuffer); err != nil {
+		panic(fmt.Sprintf("error while writing to output file: %v", err))
 	}
 }
 
