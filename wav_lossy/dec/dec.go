@@ -54,6 +54,8 @@ func main() {
 		panic(fmt.Sprintf("error while reading bit depth: %v", err))
 	}
 	bitDepth := uint16(encodedBitDepth) + 1
+	minimumValue := int(-1) << (bitDepth - 1)
+	maximumValue := -(minimumValue + 1)
 	var samplingRate uint32
 	if err := binary.Read(bufReader, binary.LittleEndian, &samplingRate); err != nil {
 		panic(fmt.Sprintf("error while reading sampling rate: %v", err))
@@ -103,7 +105,7 @@ func main() {
 			}
 			coefficientsToData(multiplier, inputBuffer, channelBuffer, remainingZeros, transform)
 			for t, value := range channelBuffer {
-				outputBuffer.Data[uint64(c)+uint64(t)*uint64(numChannels)] = int(math.Round(value))
+				outputBuffer.Data[uint64(c)+uint64(t)*uint64(numChannels)] = min(max(int(math.Round(value)), minimumValue), maximumValue)
 			}
 		}
 		if err := encoder.Write(&outputBuffer); err != nil {
@@ -120,7 +122,7 @@ func main() {
 			}
 			coefficientsToData(multiplier, inputBuffer, channelBuffer, remainingZeros, transform)
 			for t, value := range channelBuffer[:framesRemaining] {
-				outputBuffer.Data[uint64(c)+uint64(t)*uint64(numChannels)] = int(math.Round(value))
+				outputBuffer.Data[uint64(c)+uint64(t)*uint64(numChannels)] = min(max(int(math.Round(value)), minimumValue), maximumValue)
 			}
 		}
 		if err := encoder.Write(&outputBuffer); err != nil {
