@@ -247,12 +247,12 @@ func bufferSlicing(bufferData []int) [][]int {
 }
 
 func main() {
-	differentialCodingFlag := flag.Bool("differential", false, "enable differential coding before LZ77 compression")
+	differentialCodingFlag := flag.Bool("differential", false, "enable differential coding before Huffman coding")
 	blockFlag := flag.Bool("slicing", false, "enable block slicing the buffer")
 	flag.Parse()
 
-	if flag.NArg() < 1 {
-		fmt.Println("usage: wav_lossless_enc [-differential] [-slicing] input.wav")
+	if flag.NArg() != 2 {
+		fmt.Println("usage: wav_lossless_enc [-differential] [-slicing] input.wav compressed_file")
 		os.Exit(1)
 	}
 
@@ -314,7 +314,7 @@ func main() {
 	fmt.Printf("encoded: %d bytes (tables: %d bytes), original: %d bytes\n",
 		binary.Size(header)+len(encodedBytes), tableBytes, originalBytes)
 
-	outFile, err := os.OpenFile("thisistheaudiofileaftertheencoder.bin", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666) //titafate iykyk
+	outFile, err := os.OpenFile(flag.Arg(1), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
 	if err != nil {
 		panic(err)
 	}
