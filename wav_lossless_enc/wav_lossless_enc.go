@@ -4,12 +4,13 @@ import (
 	"container/heap"
 	"flag"
 	"fmt"
-	"math"
 	"os"
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 )
+
+const blockSize = 4096
 
 type BinaryTreeNode struct {
 	// count  uint
@@ -160,14 +161,9 @@ func huffmanMethod(bufferData []int, node *BinaryTreeNode) []byte { //helped by 
 
 func bufferSlicing(bufferData []int) [][]int {
 	var blocks [][]int
-	blockSize := 4096
-	blockNumber := int(math.Floor(float64(len(bufferData) / blockSize)))
-	for i := 0; i <= blockNumber; i += blockSize {
-		if i != blockNumber {
-			blocks = append(blocks, bufferData[i:i+blockSize])
-			continue
-		}
-		blocks = append(blocks, bufferData[i:i+(len(bufferData)-blockNumber*blockSize)])
+	for start := 0; start <= len(bufferData); start += blockSize {
+		end := min(start+blockSize, len(bufferData))
+		blocks = append(blocks, bufferData[start:end])
 	}
 	return blocks
 }
