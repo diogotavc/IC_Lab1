@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"slices"
+	"flag"
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
@@ -14,17 +15,24 @@ import (
 	// "github.com/zerfoo/float16"
 )
 
-const chunkSize = uint16(8192)
-const floatChunkSize = float64(chunkSize)
 const inlineZeros = 1
 
 func main() {
-	if len(os.Args) < 2 {
+	chunkSizeArg := flag.Int("block-size", 8192, "set encoder block size")
+	flag.Parse()
+	if *chunkSizeArg < 1 {
+		panic("block size must be at least 1")
+	} else if *chunkSizeArg > 32768 {
+		panic("block size is at most 32768")
+	}
+	chunkSize := uint16(*chunkSizeArg)
+	args := flag.Args()
+	if len(args) < 1 {
 		panic("no input file passed")
-	} else if len(os.Args) < 3 {
+	} else if len(args) < 2 {
 		panic("no output file passed")
 	}
-	file, err := os.OpenFile(os.Args[1], os.O_RDONLY, 0)
+	file, err := os.OpenFile(args[0], os.O_RDONLY, 0)
 	if err != nil {
 		panic(fmt.Sprintf("error while opening input file: %v", err))
 	}
@@ -40,7 +48,7 @@ func main() {
 	fmt.Println("number of frames", numFrames)
 	format := decoder.Format()
 
-	outputFile, err := os.OpenFile(os.Args[2], os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
+	outputFile, err := os.OpenFile(args[1], os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
 	if err != nil {
 		panic(fmt.Sprintf("error while opening output file: %v", err))
 	}
