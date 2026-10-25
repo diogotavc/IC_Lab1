@@ -210,6 +210,33 @@ func encodeBlock(data []int) ([]byte, []symbolLength) {
 	return huffmanMethod(data, table), symbols
 }
 
+func serialiseTable(symbols []symbolLength) []byte {
+	var result []byte
+	result = binary.AppendUvarint(result, uint64(len(symbols)))
+
+	var longestCodeLength uint
+	if len(symbols) > 0 {
+		last := len(symbols)-1
+		longestCodeLength = symbols[last].length
+	}
+	if longestCodeLength > 255 {
+		panic("error: huffman code too long")
+	}
+	result = append(result, byte(longestCodeLength))
+
+	symbolCount := make([]uint64, longestCodeLength+1)
+	for _, symbol := range symbols {
+		symbolCount[symbol.length]++
+	}
+	for length := uint(1); length <= longestCodeLength; length++ {
+		result = binary.AppendUvarint(result, symbolCount[length])
+	}
+	for _, symbol := range symbols {
+		result = binary.AppendVarint(result, int64(symbol.value))
+	}
+	return result
+}
+
 func bufferSlicing(bufferData []int) [][]int {
 	var blocks [][]int
 	for start := 0; start < len(bufferData); start += blockSize {
@@ -274,14 +301,18 @@ func main() {
 	}
 
 	var encodedBytes []byte
+	var tableBytes int
 	for _, block := range blocks {
 		bits, symbols := encodeBlock(block)
-		_ = symbols	// STILL NEED TO PUT THIS INTO THE FILE TO DECODE ARGH
+		table := serialiseTable(symbols)
+		tableBytes += len(table)
+		encodedBytes = append(encodedBytes, table...)
 		encodedBytes = append(encodedBytes, bits...)
 	}
 
 	originalBytes := len(buffer.Data) * buffer.SourceBitDepth / 8
-	fmt.Printf("encoded: %d bytes, original: %d bytes\n", binary.Size(header)+len(encodedBytes), originalBytes)
+	fmt.Printf("encoded: %d bytes (tables: %d bytes), original: %d bytes\n",
+		binary.Size(header)+len(encodedBytes), tableBytes, originalBytes)
 
 	outFile, err := os.OpenFile("thisistheaudiofileaftertheencoder.bin", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666) //titafate iykyk
 	if err != nil {
