@@ -80,5 +80,45 @@ func main() {
 		samplesPerBlock = uint64(blockSize)
 	}
 
-	_ = samplesPerBlock
+	for start := uint64(0); start < totalSamples; start += samplesPerBlock {
+		blockLength := min(samplesPerBlock, totalSamples-start)
+
+		symbols, counts, err := readTable(bufReader)
+		if err != nil {
+			panic(fmt.Sprintf("error while reading table of block at %v: %v", start, err))
+		}
+		fmt.Printf("Block at %v: %v samples, %v symbols, longest code %v bits\n",
+			start, blockLength, len(symbols), len(counts)-1)
+
+		break
+	}
+}
+
+func readTable(bufReader *bufio.Reader) (symbols []int, counts []uint64, err error) {
+	numSymbols, err := binary.ReadUvarint(bufReader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error while reading number of symbols: %v", err)
+	}
+	longestCodeLength, err := bufReader.ReadByte()
+	if err != nil {
+		return nil, nil, fmt.Errorf("error while reading longest code length: %v", err)
+	}
+
+	counts = make([]uint64, uint(longestCodeLength)+1)
+	for length := uint(1); length <= uint(longestCodeLength); length++ {
+		counts[length], err = binary.ReadUvarint(bufReader)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error while reading count of length %v: %v", length, err)
+		}
+	}
+
+	symbols = make([]int, numSymbols)
+	for i := range symbols {
+		value, err := binary.ReadVarint(bufReader)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error while reading symbol %v: %v", i, err)
+		}
+		symbols[i] = int(value)
+	}
+	return symbols, counts, nil
 }
