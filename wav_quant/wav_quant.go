@@ -32,7 +32,7 @@ func main() {
 			buffer.Data[i+c] &^= bin_mask
 		}
 	}
-	file, err = os.OpenFile("../example_w_bin.wav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
+	file, err = os.OpenFile("quantized.wav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
 
 	encoder := wav.NewEncoder(file, buffer.Format.SampleRate, buffer.SourceBitDepth, buffer.Format.NumChannels, int(decoder.WavAudioFormat))
 	defer encoder.Close()
