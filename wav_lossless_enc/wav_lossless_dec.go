@@ -90,6 +90,9 @@ func main() {
 		fmt.Printf("Block at %v: %v samples, %v symbols, longest code %v bits\n",
 			start, blockLength, len(symbols), len(counts)-1)
 
+		firstCode, firstIndex := firstCodesPerLength(counts)
+		fmt.Printf("  first code per length: %v\n  first symbol index per length: %v\n", firstCode[1:], firstIndex[1:])
+
 		break
 	}
 }
@@ -126,4 +129,17 @@ func readTable(bufReader *bufio.Reader) (symbols []int, counts []uint64, err err
 		symbols[i] = int(value)
 	}
 	return symbols, counts, nil
+}
+
+func canonicalStarts(counts []uint64) (firstCode []uint64, firstIndex []uint64) {
+	firstCode = make([]uint64, len(counts))
+	firstIndex = make([]uint64, len(counts))
+	var code, index uint64
+	for length := 1; length < len(counts); length++ {
+		firstCode[length] = code
+		firstIndex[length] = index
+		code = (code + counts[length]) << 1
+		index += counts[length]
+	}
+	return firstCode, firstIndex
 }
