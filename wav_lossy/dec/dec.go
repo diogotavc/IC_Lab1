@@ -76,35 +76,27 @@ func main() {
 	if err := binary.Read(bufReader, binary.LittleEndian, &chunkSize); err != nil {
 		panic(fmt.Sprintf("error while reading chunk size: %v", err))
 	}
-	var samplesPerChunk uint16
-	if err := binary.Read(bufReader, binary.LittleEndian, &samplesPerChunk); err != nil {
-		panic(fmt.Sprintf("error while reading samples per chunk: %v", err))
-	}
-	if chunkSize > samplesPerChunk {
-		panic(fmt.Sprintf("a chunk should generate at least %v samples, file has %v samples per chunk", chunkSize, samplesPerChunk))
-	}
 
-	channelBuffer := make([]float64, samplesPerChunk)
+	channelBuffer := make([]float64, chunkSize)
 	inputBuffer := make([]int8, chunkSize)
 	int8Zeros := make([]int8, chunkSize)
-	floatZeros := make([]float64, samplesPerChunk-chunkSize)
 	outputBuffer := audio.IntBuffer{
 		Format: &audio.Format{
 			NumChannels: int(numChannels),
 			SampleRate:  int(samplingRate),
 		},
-		Data:           make([]int, uint(samplesPerChunk)*uint(numChannels)),
+		Data:           make([]int, uint(chunkSize)*uint(numChannels)),
 		SourceBitDepth: int(bitDepth),
 	}
 	framesRemaining := numFrames
-	transform := dct.New(int(samplesPerChunk))
-	for ; framesRemaining >= uint64(samplesPerChunk); framesRemaining -= uint64(samplesPerChunk) {
+	transform := dct.New(int(chunkSize))
+	for ; framesRemaining >= uint64(chunkSize); framesRemaining -= uint64(chunkSize) {
 		for c := range uint(numChannels) {
 			multiplier, err := readChannelChunk(bufReader, c, inputBuffer, int8Zeros)
 			if err != nil {
 				panic(err)
 			}
-			coefficientsToData(multiplier, inputBuffer, channelBuffer, floatZeros, transform)
+			coefficientsToData(multiplier, inputBuffer, channelBuffer, transform)
 			for t, value := range channelBuffer {
 				outputBuffer.Data[uint64(c)+uint64(t)*uint64(numChannels)] = min(max(int(math.Round(value)), minimumValue), maximumValue)
 			}
@@ -121,7 +113,7 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
-			coefficientsToData(multiplier, inputBuffer, channelBuffer, floatZeros, transform)
+			coefficientsToData(multiplier, inputBuffer, channelBuffer, transform)
 			for t, value := range channelBuffer[:framesRemaining] {
 				outputBuffer.Data[uint64(c)+uint64(t)*uint64(numChannels)] = min(max(int(math.Round(value)), minimumValue), maximumValue)
 			}
@@ -163,11 +155,9 @@ func readChannelChunk(bufReader *bufio.Reader, channel uint, inputBuffer []int8,
 	return multiplier, nil
 }
 
-func coefficientsToData(multiplier int32, coefficients []int8, outputBuffer []float64, zeroPadding []float64, transform *dct.T) {
-	chunkSize := len(coefficients)
+func coefficientsToData(multiplier int32, coefficients []int8, outputBuffer []float64, transform *dct.T) {
 	for i, value := range coefficients {
 		outputBuffer[i] = float64(int(value)*int(multiplier)) / 127
 	}
-	copy(outputBuffer[chunkSize:], zeroPadding)
 	transform.Inv(outputBuffer)
 }

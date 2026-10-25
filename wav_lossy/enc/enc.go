@@ -15,7 +15,6 @@ import (
 )
 
 const chunkSize = uint16(8192)
-const coefficientsKept = uint16(8192)
 const floatChunkSize = float64(chunkSize)
 const inlineZeros = 1
 
@@ -76,9 +75,6 @@ func main() {
 	if err := binary.Write(writer, binary.LittleEndian, numFrames); err != nil {
 		panic(fmt.Sprintf("error writing to output: %v", err))
 	}
-	if err := binary.Write(writer, binary.LittleEndian, coefficientsKept); err != nil {
-		panic(fmt.Sprintf("error writing to output: %v", err))
-	}
 	if err := binary.Write(writer, binary.LittleEndian, chunkSize); err != nil {
 		panic(fmt.Sprintf("error while writing to output: %v", err))
 	}
@@ -93,7 +89,7 @@ func main() {
 	for c := range numChannels {
 		channelFloatBuffer[c] = make([]float64, chunkSize)
 	}
-	outputBuffer := make([]int32, coefficientsKept)
+	outputBuffer := make([]int32, chunkSize)
 	runLengthState := runLengthState{
 		numberOfZeros: 0,
 		nonZeros:      make([]int8, 0),
@@ -114,7 +110,7 @@ func main() {
 		}
 		for _, buffer := range channelFloatBuffer {
 			transform.Do(buffer)
-			for i, value := range buffer[:coefficientsKept] {
+			for i, value := range buffer {
 				outputBuffer[i] = int32(math.Round(value))
 			}
 			absMax := slices.Max(outputBuffer)
