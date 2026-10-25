@@ -105,11 +105,16 @@ func readTable(bufReader *bufio.Reader) (symbols []int, counts []uint64, err err
 	}
 
 	counts = make([]uint64, uint(longestCodeLength)+1)
+	var countSum uint64
 	for length := uint(1); length <= uint(longestCodeLength); length++ {
 		counts[length], err = binary.ReadUvarint(bufReader)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error while reading count of length %v: %v", length, err)
 		}
+		countSum += counts[length]
+	}
+	if countSum != numSymbols {
+		return nil, nil, fmt.Errorf("error: table has %v symbols but %v were counted", numSymbols, countSum)
 	}
 
 	symbols = make([]int, numSymbols)
