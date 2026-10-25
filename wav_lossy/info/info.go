@@ -55,14 +55,35 @@ func main() {
 	}
 
 	coefficients := make([]int8, chunkSize)
+	zeros := make([]int8, chunkSize)
 	for range numberOfChunks {
 		for c := range numChannels {
 			var multiplier int32
 			if err := binary.Read(bufReader, binary.LittleEndian, &multiplier); err != nil {
 				panic(fmt.Sprintf("error while reading multiplier: %v\n", err))
 			}
-			if err := binary.Read(bufReader, binary.LittleEndian, coefficients); err != nil {
-				panic(fmt.Sprintf("error while reading channel %v coefficients: %v", c, err))
+			remainingCoefficients := chunkSize
+			cursor := uint(0)
+			for remainingCoefficients != 0 {
+				runLength, err := binary.ReadUvarint(bufReader)
+				if err != nil {
+					panic(fmt.Sprintf("error while reading run length: %v\n", err))
+				}
+				if runLength > uint64(remainingCoefficients) {
+					panic("run length is larger than remaining coefficients")
+				}
+				zerosLength, err := binary.ReadUvarint(bufReader)
+				if err != nil {
+					panic(fmt.Sprintf("error while reading run length: %v\n", err))
+				}
+				if err := binary.Read(bufReader, binary.LittleEndian, coefficients[cursor:][:runLength]); err != nil {
+					panic(fmt.Sprintf("error while reading channel %v coefficients: %v", c, err))
+				}
+				filled := runLength+zerosLength
+				cursor += uint(runLength)
+				copy(coefficients[cursor:][:zerosLength], zeros)
+				cursor += uint(zerosLength)
+				remainingCoefficients -= uint16(filled)
 			}
 			maxCoefficient := slices.Max(coefficients)
 			minCoefficient := slices.Min(coefficients)

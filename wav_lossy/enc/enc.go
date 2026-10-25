@@ -93,6 +93,10 @@ func main() {
 		channelFloatBuffer[c] = make([]float64, chunkSize)
 	}
 	outputBuffer := make([]int32, coefficientsKept)
+	runLengthState := runLengthState{
+		numberOfZeros: 0,
+		nonZeros:      make([]int8, 0),
+	}
 	transform := dct.New(int(chunkSize))
 	for {
 		samplesRead, err := decoder.PCMBuffer(&buffer)
@@ -112,9 +116,6 @@ func main() {
 			for i, value := range buffer[:coefficientsKept] {
 				outputBuffer[i] = int32(math.Round(value))
 			}
-			// if err := binary.Write(writer, binary.LittleEndian, outputBuffer); err != nil {
-			// 	panic(fmt.Sprintf("error writing to output: %v", err))
-			// }
 			absMax := slices.Max(outputBuffer)
 			if absMax < 0 {
 				absMax = -absMax
@@ -128,16 +129,59 @@ func main() {
 				panic(fmt.Sprintf("error while writing mutliplier value to output: %v\n", err))
 			}
 			floatMax := float64(max)
-			// floatMin := float64(min)
-			// fmt.Println("max:", max)
 			for _, value := range outputBuffer {
 				quantized := int8(math.Round(float64(value) * 127 / floatMax))
 				// fmt.Println("real value:", buffer[i], "value:", value, "quantized:", quantized, "dequantized: ", float64(int32(quantized) * max)/127)
-				writer.WriteByte(byte(quantized))
+				runLengthState.receive(writer, quantized)
 			}
+			runLengthState.flush(writer)
 		}
 		if uint(samplesRead) < uint(bufferLen) {
 			break
 		}
 	}
+}
+
+type runLengthState struct {
+	numberOfZeros uint
+	nonZeros      []int8
+}
+
+func (state *runLengthState) receive(writer *bufio.Writer, value int8) error {
+	if value != 0 {
+		if state.numberOfZeros != 0 {
+			if err := state.flush(writer); err != nil {
+				return err
+			}
+		}
+		state.nonZeros = append(state.nonZeros, value)
+	} else {
+		state.numberOfZeros += 1
+	}
+	return nil
+}
+
+func (state *runLengthState) flush(writer *bufio.Writer) error {
+	uVarintBuffer := make([]byte, binary.MaxVarintLen16)
+	n := binary.PutUvarint(uVarintBuffer, uint64(len(state.nonZeros)))
+	if _, err := writer.Write(uVarintBuffer[:n]); err != nil {
+		return err
+	}
+	n = binary.PutUvarint(uVarintBuffer, uint64(state.numberOfZeros))
+	if _, err := writer.Write(uVarintBuffer[:n]); err != nil {
+		return err
+	}
+	if err := binary.Write(writer, binary.LittleEndian, state.nonZeros); err != nil {
+		return err
+	}
+	// state.sum += state.numberOfZeros + uint(len(state.nonZeros))
+	state.numberOfZeros = 0
+	state.nonZeros = state.nonZeros[:0]
+	// if final {
+	// 	if state.sum != uint(chunkSize) {
+	// 		panic(fmt.Sprintf("sum %v should equal chunk size %v", state.sum, chunkSize))
+	// 	}
+	// 	state.sum = 0
+	// }
+	return nil
 }
