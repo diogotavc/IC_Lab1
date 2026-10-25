@@ -2,8 +2,14 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
 	"os"
+)
+
+const (
+	flagDifferential uint8 = 1 << 0
+	flagSlicing      uint8 = 1 << 1
 )
 
 func main() {
@@ -31,5 +37,33 @@ func main() {
 		}
 	}()
 
-	_ = bufReader
+	var encodedNumChannels uint8
+	if err := binary.Read(bufReader, binary.LittleEndian, &encodedNumChannels); err != nil {
+		panic(fmt.Sprintf("error while reading number of channels: %v", err))
+	}
+	numChannels := uint16(encodedNumChannels) + 1
+	var encodedBitDepth uint8
+	if err := binary.Read(bufReader, binary.LittleEndian, &encodedBitDepth); err != nil {
+		panic(fmt.Sprintf("error while reading bit depth: %v", err))
+	}
+	bitDepth := uint16(encodedBitDepth) + 1
+	var samplingRate uint32
+	if err := binary.Read(bufReader, binary.LittleEndian, &samplingRate); err != nil {
+		panic(fmt.Sprintf("error while reading sampling rate: %v", err))
+	}
+	var numFrames uint64
+	if err := binary.Read(bufReader, binary.LittleEndian, &numFrames); err != nil {
+		panic(fmt.Sprintf("error while reading number of frames: %v", err))
+	}
+	var flags uint8
+	if err := binary.Read(bufReader, binary.LittleEndian, &flags); err != nil {
+		panic(fmt.Sprintf("error while reading flags: %v", err))
+	}
+	if flags&^(flagDifferential|flagSlicing) != 0 {
+		panic(fmt.Sprintf("unknown flags: %08b", flags))
+	}
+	differential := flags&flagDifferential != 0
+	slicing := flags&flagSlicing != 0
+	fmt.Printf("Channels: %v\nBit depth: %v\nSampling rate: %v\nNumber of frames: %v\nDifferential: %v\nSlicing: %v\n",
+		numChannels, bitDepth, samplingRate, numFrames, differential, slicing)
 }
