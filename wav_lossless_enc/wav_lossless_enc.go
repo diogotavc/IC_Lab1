@@ -2,6 +2,7 @@ package main
 
 import (
 	"container/heap"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"os"
@@ -12,6 +13,19 @@ import (
 )
 
 const blockSize = 4096
+
+const (
+	flagDifferential uint8 = 1 << 0
+	flagSlicing      uint8 = 1 << 1
+)
+
+type fileHeader struct {
+	NumChannels uint8
+	BitDepth    uint8
+	SampleRate  uint32
+	NumFrames   uint64
+	Flags       uint8
+}
 
 type huffmanCode struct {
 	bits   uint64
@@ -232,6 +246,23 @@ func main() {
 		panic("error: only stereo files supported")
 	}
 
+	var flags uint8
+	if *differentialCodingFlag {
+		flags |= flagDifferential
+	}
+	if *blockFlag {
+		flags |= flagSlicing
+	}
+
+	numChannels := buffer.Format.NumChannels
+	header := fileHeader{
+		NumChannels: uint8(numChannels - 1),
+		BitDepth:    uint8(buffer.SourceBitDepth - 1),
+		SampleRate:  uint32(buffer.Format.SampleRate),
+		NumFrames:   uint64(len(buffer.Data) / numChannels),
+		Flags:       flags,
+	}
+
 	data := buffer.Data
 	if *differentialCodingFlag {
 		data = differentialCoding(*buffer).Data
@@ -250,10 +281,15 @@ func main() {
 	}
 
 	originalBytes := len(buffer.Data) * buffer.SourceBitDepth / 8
-	fmt.Printf("encoded: %d bytes, original: %d bytes\n", len(encodedBytes), originalBytes)
+	fmt.Printf("encoded: %d bytes, original: %d bytes\n", binary.Size(header)+len(encodedBytes), originalBytes)
 
 	outFile, err := os.OpenFile("thisistheaudiofileaftertheencoder.bin", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666) //titafate iykyk
 	if err != nil {
+		panic(err)
+	}
+
+	if err := binary.Write(outFile, binary.LittleEndian, header); err != nil {
+		outFile.Close()
 		panic(err)
 	}
 
