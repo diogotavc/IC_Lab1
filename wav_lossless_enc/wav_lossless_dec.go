@@ -80,6 +80,7 @@ func main() {
 		samplesPerBlock = uint64(blockSize)
 	}
 
+	samples := make([]int, totalSamples)
 	for start := uint64(0); start < totalSamples; start += samplesPerBlock {
 		blockLength := min(samplesPerBlock, totalSamples-start)
 
@@ -87,13 +88,12 @@ func main() {
 		if err != nil {
 			panic(fmt.Sprintf("error while reading table of block at %v: %v", start, err))
 		}
-		fmt.Printf("Block at %v: %v samples, %v symbols, longest code %v bits\n",
-			start, blockLength, len(symbols), len(counts)-1)
+		firstCode, firstIndex := canonicalStarts(counts)
 
-		firstCode, firstIndex := firstCodesPerLength(counts)
-		fmt.Printf("  first code per length: %v\n  first symbol index per length: %v\n", firstCode[1:], firstIndex[1:])
-
-		break
+		block := samples[start : start+blockLength]
+		if err := decodeBlock(bufReader, block, symbols, counts, firstCode, firstIndex); err != nil {
+			panic(fmt.Sprintf("error while decoding block at %v: %v", start, err))
+		}
 	}
 }
 
@@ -142,4 +142,48 @@ func canonicalStarts(counts []uint64) (firstCode []uint64, firstIndex []uint64) 
 		index += counts[length]
 	}
 	return firstCode, firstIndex
+}
+
+type bitReader struct {
+	reader   *bufio.Reader
+	current  byte
+	bitsLeft uint
+}
+
+func (b *bitReader) readBit() (uint64, error) {
+	if b.bitsLeft == 0 {
+		next, err := b.reader.ReadByte()
+		if err != nil {
+			return 0, err
+		}
+		b.current = next
+		b.bitsLeft = 8
+	}
+	b.bitsLeft--
+	return uint64(b.current>>b.bitsLeft) & 1, nil
+}
+
+func decodeBlock(bufReader *bufio.Reader, out []int, symbols []int, counts, firstCode, firstIndex []uint64) error {
+	if len(out) > 0 && len(symbols) == 0 {
+		return fmt.Errorf("block has %v samples but an empty table", len(out))
+	}
+	bits := bitReader{reader: bufReader}
+	for i := range out {
+		var code uint64
+		for length := 1; ; length++ {
+			if length >= len(counts) {
+				return fmt.Errorf("sample %v: no code matches after %v bits", i, length-1)
+			}
+			bit, err := bits.readBit()
+			if err != nil {
+				return fmt.Errorf("error while reading bits of sample %v: %v", i, err)
+			}
+			code = code<<1 | bit
+			if code >= firstCode[length] && code-firstCode[length] < counts[length] {
+				out[i] = symbols[firstIndex[length]+code-firstCode[length]]
+				break
+			}
+		}
+	}
+	return nil
 }
