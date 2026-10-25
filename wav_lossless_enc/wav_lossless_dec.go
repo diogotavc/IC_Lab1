@@ -95,6 +95,12 @@ func main() {
 			panic(fmt.Sprintf("error while decoding block at %v: %v", start, err))
 		}
 	}
+
+	if differential {
+		for i := uint64(numChannels); i < totalSamples; i++ {
+			samples[i] += samples[i-uint64(numChannels)]
+		}
+	}
 }
 
 func readTable(bufReader *bufio.Reader) (symbols []int, counts []uint64, err error) {
