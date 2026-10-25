@@ -233,8 +233,33 @@ func main() {
 			fmt.Println(len(buffer.Data))
 		}
 	}
-	// file, err = os.OpenFile("thisistheaudiofileaftertheencoder.txt", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666) //titafate iykyk
-	// encoder := wav.NewEncoder(file, buffer.Format.SampleRate, buffer.SourceBitDepth, buffer.Format.NumChannels, int(decoder.WavAudioFormat))
-	// encoder.Write(finalBuffer.AsIntBuffer())
-	// encoder.Close()
+	outFile, err := os.OpenFile("thisistheaudiofileaftertheencoder.bin", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666) //titafate iykyk
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = outFile.Write(encodedBytes)
+	if err != nil {
+		outFile.Close()
+		panic(err)
+	}
+
+	if err := outFile.Close(); err != nil {
+		panic(err)
+	}
+
+	// treeFile, err := os.OpenFile("tree.txt", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666) //titafate iykyk
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	// _, err = treeFile.Write(encodedBytes)
+	// if err != nil {
+	// 	treeFile.Close()
+	// 	panic(err)
+	// }
+
+	// if err := treeFile.Close(); err != nil {
+	// 	panic(err)
+	// }
 }
