@@ -5,8 +5,11 @@ import (
 	"math"
 	"os"
 
+	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 )
+
+const blockSize = 8192
 
 func main() {
 	if len(os.Args) != 3 {
@@ -27,81 +30,102 @@ func main() {
 
 	decoder1 := wav.NewDecoder(audio1)
 	decoder2 := wav.NewDecoder(audio2)
-	buffer1, err := decoder1.FullPCMBuffer()
-	if err != nil {
+	if err := decoder1.FwdToPCM(); err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
-	buffer2, err := decoder2.FullPCMBuffer()
-	if err != nil {
+	if err := decoder2.FwdToPCM(); err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
+
 	if decoder1.BitDepth != decoder2.BitDepth || decoder1.SampleRate != decoder2.SampleRate {
 		panic("error: files must have the same bit depth and sample rate")
 	}
-
-	numChannels := buffer1.Format.NumChannels
-	if numChannels != buffer2.Format.NumChannels {
+	format := decoder1.Format()
+	numChannels := format.NumChannels
+	if numChannels != decoder2.Format().NumChannels {
 		panic("error: both files should have the same number of channels")
 	}
-
-	if len(buffer1.Data) != len(buffer2.Data) {
+	if decoder1.PCMLen() != decoder2.PCMLen() {
 		panic("error: both files should have the same number of samples")
 	}
 
-	numFrames := len(buffer1.Data) / numChannels
+	bufferLen := blockSize * numChannels
+	buf1 := &audio.IntBuffer{
+		Format:         format,
+		Data:           make([]int, bufferLen),
+		SourceBitDepth: int(decoder1.BitDepth),
+	}
+	buf2 := &audio.IntBuffer{
+		Format:         format,
+		Data:           make([]int, bufferLen),
+		SourceBitDepth: int(decoder2.BitDepth),
+	}
 
 	squaredError := make([]float64, numChannels)
-	var squaredErrorMono float64
-
 	maxError := make([]float64, numChannels)
-	var maxErrorMono float64
-
 	energy := make([]float64, numChannels)
-	var energyMono float64
+	var squaredErrorMono, maxErrorMono, energyMono float64
+	var numFrames int64
 
-	for f := range numFrames {
-		var monoError, monoOriginal float64
-		for c := range numChannels {
-			a := float64(buffer1.Data[f*numChannels+c])
-			b := float64(buffer2.Data[f*numChannels+c])
+	invCh := 1 / float64(numChannels)
 
-			diff := a - b
-			monoError += diff
-			monoOriginal += a
-			squaredError[c] += diff * diff
-			energy[c] += a * a
+	for {
+		var n2 int
+		var e2 error
+		done := make(chan struct{})
+		go func() {
+			n2, e2 = decoder2.PCMBuffer(buf2)
+			close(done)
+		}()
+		n1, e1 := decoder1.PCMBuffer(buf1)
+		<-done
+		if n1 != n2 {
+			panic("error: both files should have the same number of samples")
+		}
+		if n1 == 0 {
+			break
+		}
 
-			if m := math.Abs(diff); m > maxError[c] {
-				maxError[c] = m
+		frames := n1 / numChannels
+		a, b := buf1.Data[:frames*numChannels], buf2.Data[:frames*numChannels]
+
+		for i := 0; i < len(a); i += numChannels {
+			var monoError, monoOriginal float64
+			fa, fb := a[i:i+numChannels], b[i:i+numChannels]
+			for c := range fa {
+				x := float64(fa[c])
+				diff := x - float64(fb[c])
+				monoError += diff
+				monoOriginal += x
+				squaredError[c] += diff * diff
+				energy[c] += x * x
+				if m := math.Abs(diff); m > maxError[c] {
+					maxError[c] = m
+				}
+			}
+			monoError *= invCh
+			monoOriginal *= invCh
+			energyMono += monoOriginal * monoOriginal
+			squaredErrorMono += monoError * monoError
+			if m := math.Abs(monoError); m > maxErrorMono {
+				maxErrorMono = m
 			}
 		}
-		monoError /= float64(numChannels)
-		monoOriginal /= float64(numChannels)
-		energyMono += monoOriginal * monoOriginal
-		squaredErrorMono += monoError * monoError
-		if m := math.Abs(monoError); m > maxErrorMono {
-			maxErrorMono = m
+		numFrames += int64(frames)
+
+		if n1 < bufferLen || e1 != nil || e2 != nil {
+			break
 		}
 	}
 
-	meanSE := make([]float64, numChannels)
-	snRatio := make([]float64, numChannels)
-	for c := range numChannels {
-		meanSE[c] = squaredError[c] / float64(numFrames)
-		snRatio[c] = 10 * math.Log10(energy[c]/squaredError[c])
-	}
-	mseMono := squaredErrorMono / float64(numFrames)
-	snrMono := 10 * math.Log10(energyMono/squaredErrorMono)
-
-	for c := range numChannels {
+	for c := 0; c < numChannels; c++ {
 		fmt.Printf("\033[1mChannel %d\033[0m\n", c)
-		fmt.Printf("MSE: %f\n", meanSE[c])
+		fmt.Printf("MSE: %f\n", squaredError[c]/float64(numFrames))
 		fmt.Printf("Max Error: %f\n", maxError[c])
-		fmt.Printf("SNR: %f\n", snRatio[c])
+		fmt.Printf("SNR: %f\n", 10*math.Log10(energy[c]/squaredError[c]))
 	}
-
 	fmt.Printf("\033[1mMono\033[0m\n")
-	fmt.Printf("MSE: %f\n", mseMono)
+	fmt.Printf("MSE: %f\n", squaredErrorMono/float64(numFrames))
 	fmt.Printf("Max Error: %f\n", maxErrorMono)
-	fmt.Printf("SNR: %f\n", snrMono)
+	fmt.Printf("SNR: %f\n", 10*math.Log10(energyMono/squaredErrorMono))
 }

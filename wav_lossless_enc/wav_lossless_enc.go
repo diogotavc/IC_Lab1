@@ -2,13 +2,41 @@ package main
 
 import (
 	"container/heap"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 )
+
+const blockSize = 4096
+
+const (
+	flagDifferential uint8 = 1 << 0
+	flagSlicing      uint8 = 1 << 1
+)
+
+type fileHeader struct {
+	NumChannels uint8
+	BitDepth    uint8
+	SampleRate  uint32
+	NumFrames   uint64
+	Flags       uint8
+	BlockSize   uint32
+}
+
+type huffmanCode struct {
+	bits   uint64
+	length uint
+}
+
+type symbolLength struct {
+	value  int
+	length uint
+}
 
 type BinaryTreeNode struct {
 	// count  uint
@@ -47,7 +75,8 @@ func (queue *NodePriorityQueue) Pop() any {
 	return item
 }
 
-func differentialCoding(buffer audio.IntBuffer) audio.IntBuffer { //differential coding where we store the difference between samples, reducing the number of bits and to further use the lz77 compression method :)
+//differential coding where we store the difference between samples, reducing the number of bits
+func differentialCoding(buffer audio.IntBuffer) audio.IntBuffer {
 	bufferLen := uint(len(buffer.Data))
 	numChannels := uint(buffer.Format.NumChannels)
 	bufferBuffer := audio.IntBuffer{
@@ -56,24 +85,24 @@ func differentialCoding(buffer audio.IntBuffer) audio.IntBuffer { //differential
 		SourceBitDepth: buffer.SourceBitDepth,
 	}
 	copy(bufferBuffer.Data, buffer.Data)
-	for i := uint(1); i < bufferLen; i += numChannels {
-		bufferBuffer.Data[i] -= buffer.Data[i+numChannels]
+	for i := bufferLen - 1; i >= numChannels; i-- {
+		bufferBuffer.Data[i] -= buffer.Data[i-numChannels]
 	}
 	return bufferBuffer
 }
 
-func encoderTree(buffer audio.IntBuffer) *BinaryTreeNode { //lz77 compression method :)
+func encoderTree(bufferData []int) *BinaryTreeNode {
 
 	counter := make(map[int]uint)
 
-	for _, num := range buffer.Data {
+	for _, num := range bufferData {
 		counter[num]++
 	}
 
 	pq := &NodePriorityQueue{}
 	heap.Init(pq)
 	for num, count := range counter {
-		heap.Push(pq, NodeItem{
+		heap.Push(pq, &NodeItem{
 			node: &BinaryTreeNode{
 				isLeaf: true,
 				value:  num,
@@ -82,8 +111,8 @@ func encoderTree(buffer audio.IntBuffer) *BinaryTreeNode { //lz77 compression me
 		})
 	}
 	for pq.Len() > 1 {
-		leftItem := heap.Pop(pq).(NodeItem)
-		rightItem := heap.Pop(pq).(NodeItem)
+		leftItem := heap.Pop(pq).(*NodeItem)
+		rightItem := heap.Pop(pq).(*NodeItem)
 
 		parentNode := &BinaryTreeNode{
 			isLeaf: false,
@@ -91,7 +120,7 @@ func encoderTree(buffer audio.IntBuffer) *BinaryTreeNode { //lz77 compression me
 			right:  rightItem.node,
 		}
 
-		heap.Push(pq, NodeItem{
+		heap.Push(pq, &NodeItem{
 			node:  parentNode,
 			count: leftItem.count + rightItem.count,
 		})
@@ -100,22 +129,139 @@ func encoderTree(buffer audio.IntBuffer) *BinaryTreeNode { //lz77 compression me
 	if pq.Len() == 0 {
 		return nil
 	}
-	return heap.Pop(pq).(NodeItem).node
+	return heap.Pop(pq).(*NodeItem).node
 }
 
-func huffmanMethod(buffer audio.IntBuffer, node *BinaryTreeNode) uint {
-	return 1
+func codeLengths(root *BinaryTreeNode) map[int]uint {
+	lengths := make(map[int]uint)
+	if root == nil {
+		return lengths
+	}
+	if root.isLeaf {
+		lengths[root.value] = 1
+		return lengths
+	}
+	calculateDepths(root, 0, lengths)
+	return lengths
+}
+
+func calculateDepths(node *BinaryTreeNode, depth uint, lengths map[int]uint) {
+	if node.isLeaf {
+		lengths[node.value] = depth
+		return
+	}
+	calculateDepths(node.left, depth+1, lengths)
+	calculateDepths(node.right, depth+1, lengths)
+}
+
+func canonicalCodes(lengths map[int]uint) (map[int]huffmanCode, []symbolLength) {
+	var symbols []symbolLength
+	for value, length := range lengths {
+		symbols = append(symbols, symbolLength{value, length})
+	}
+	sort.Slice(symbols, func(i, j int) bool {
+		if symbols[i].length != symbols[j].length {
+			return symbols[i].length < symbols[j].length
+		}
+		return symbols[i].value < symbols[j].value
+	})
+
+	table := make(map[int]huffmanCode)
+	var code uint64
+	var prevLen uint
+	for i, symbol := range symbols {
+		if i > 0 {
+			code++
+		}
+		code = code << (symbol.length - prevLen)
+		table[symbol.value] = huffmanCode{code, symbol.length}
+		prevLen = symbol.length
+	}
+	return table, symbols
+}
+
+func huffmanMethod(bufferData []int, table map[int]huffmanCode) []byte {
+	var result []byte
+	var currentByte byte
+	var bitsFilled uint
+
+	for _, sample := range bufferData {
+		code := table[sample]
+		for i := int(code.length) - 1; i >= 0; i-- {
+			currentByte = currentByte<<1 | byte((code.bits>>uint(i))&1)
+			bitsFilled++
+			if bitsFilled == 8 {
+				result = append(result, currentByte)
+				currentByte = 0
+				bitsFilled = 0
+			}
+		}
+	}
+	if bitsFilled > 0 {
+		currentByte = currentByte << (8 - bitsFilled)
+		result = append(result, currentByte)
+	}
+	return result
+}
+
+func encodeBlock(data []int) ([]byte, []symbolLength) {
+	root := encoderTree(data)
+	lengths := codeLengths(root)
+	table, symbols := canonicalCodes(lengths)
+	return huffmanMethod(data, table), symbols
+}
+
+func serialiseTable(symbols []symbolLength) []byte {
+	var result []byte
+	result = binary.AppendUvarint(result, uint64(len(symbols)))
+
+	var longestCodeLength uint
+	if len(symbols) > 0 {
+		last := len(symbols)-1
+		longestCodeLength = symbols[last].length
+	}
+	if longestCodeLength > 255 {
+		panic("error: huffman code too long")
+	}
+	result = append(result, byte(longestCodeLength))
+
+	symbolCount := make([]uint64, longestCodeLength+1)
+	for _, symbol := range symbols {
+		symbolCount[symbol.length]++
+	}
+	for length := uint(1); length <= longestCodeLength; length++ {
+		result = binary.AppendUvarint(result, symbolCount[length])
+	}
+	for _, symbol := range symbols {
+		result = binary.AppendVarint(result, int64(symbol.value))
+	}
+	return result
+}
+
+func bufferSlicing(bufferData []int) [][]int {
+	var blocks [][]int
+	for start := 0; start < len(bufferData); start += blockSize {
+		end := min(start+blockSize, len(bufferData))
+		blocks = append(blocks, bufferData[start:end])
+	}
+	return blocks
 }
 
 func main() {
-	differentialCodingFlag := flag.Bool("differentialCoding", false, "enable differential coding before LZ77 compression")
-	// echoCoefficientFlag := flag.Float64("echoC", 0, "echo delay")
+	differentialCodingFlag := flag.Bool("differential", false, "enable differential coding before Huffman coding")
+	blockFlag := flag.Bool("slicing", false, "enable block slicing the buffer")
 	flag.Parse()
-	file, err := os.Open(flag.Arg(0))
 
+	if flag.NArg() != 2 {
+		fmt.Println("usage: wav_lossless_enc [-differential] [-slicing] input.wav compressed_file")
+		os.Exit(1)
+	}
+
+	file, err := os.Open(flag.Arg(0))
 	if err != nil {
 		panic(fmt.Sprintf("error: %v", err))
 	}
+	defer file.Close()
 
 	decoder := wav.NewDecoder(file)
 
@@ -128,21 +274,67 @@ func main() {
 		panic("error: only stereo files supported")
 	}
 
-	if err != nil {
-		panic(fmt.Sprintf("error: %v", err))
+	var flags uint8
+	if *differentialCodingFlag {
+		flags |= flagDifferential
+	}
+	if *blockFlag {
+		flags |= flagSlicing
 	}
 
-	var rootNode *BinaryTreeNode
-	if *differentialCodingFlag {
-		differentialBuffer := differentialCoding(*buffer)
-		rootNode = encoderTree(differentialBuffer)
-	} else {
-		rootNode = encoderTree(*buffer)
+	numChannels := buffer.Format.NumChannels
+	header := fileHeader{
+		NumChannels: uint8(numChannels - 1),
+		BitDepth:    uint8(buffer.SourceBitDepth - 1),
+		SampleRate:  uint32(buffer.Format.SampleRate),
+		NumFrames:   uint64(len(buffer.Data) / numChannels),
+		Flags:       flags,
 	}
-	fmt.Println(huffmanMethod(*buffer, rootNode))
-	//fmt.Println(encoderDict)
-	// file, err = os.OpenFile("thisistheaudiofileaftertheencoder.txt", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666) //titafate iykyk
-	// encoder := wav.NewEncoder(file, buffer.Format.SampleRate, buffer.SourceBitDepth, buffer.Format.NumChannels, int(decoder.WavAudioFormat))
-	// encoder.Write(finalBuffer.AsIntBuffer())
-	// encoder.Close()
+	if *blockFlag {
+		header.BlockSize = blockSize
+	}
+
+	data := buffer.Data
+	if *differentialCodingFlag {
+		data = differentialCoding(*buffer).Data
+	}
+
+	blocks := [][]int{data}
+	if *blockFlag {
+		blocks = bufferSlicing(data)
+	}
+
+	var encodedBytes []byte
+	var tableBytes int
+	for _, block := range blocks {
+		bits, symbols := encodeBlock(block)
+		table := serialiseTable(symbols)
+		tableBytes += len(table)
+		encodedBytes = append(encodedBytes, table...)
+		encodedBytes = append(encodedBytes, bits...)
+	}
+
+	originalBytes := len(buffer.Data) * buffer.SourceBitDepth / 8
+	fmt.Printf("encoded: %d bytes (tables: %d bytes), original: %d bytes\n",
+		binary.Size(header)+len(encodedBytes), tableBytes, originalBytes)
+
+	outFile, err := os.OpenFile(flag.Arg(1), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := binary.Write(outFile, binary.LittleEndian, header); err != nil {
+		outFile.Close()
+		panic(err)
+	}
+
+	_, err = outFile.Write(encodedBytes)
+	if err != nil {
+		outFile.Close()
+		panic(err)
+	}
+
+	if err := outFile.Close(); err != nil {
+		panic(err)
+	}
 }
