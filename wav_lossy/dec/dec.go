@@ -144,7 +144,7 @@ func readChannelChunk(bufReader *bufio.Reader, channel uint, inputBuffer []int8,
 			return 0, fmt.Errorf("error while reading run length: %v\n", err)
 		}
 		if runLength > uint64(remainingCoefficients) {
-			return 0, fmt.Errorf("run length is larger than remaining coefficients")
+			return 0, fmt.Errorf("run length is larger than remaining coefficients: %v > %v", runLength, remainingCoefficients)
 		}
 		zerosLength, err := binary.ReadUvarint(bufReader)
 		if err != nil {

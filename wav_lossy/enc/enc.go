@@ -17,6 +17,7 @@ import (
 const chunkSize = uint16(8192)
 const coefficientsKept = uint16(8192)
 const floatChunkSize = float64(chunkSize)
+const inlineZeros = 1
 
 func main() {
 	if len(os.Args) < 2 {
@@ -149,10 +150,16 @@ type runLengthState struct {
 
 func (state *runLengthState) receive(writer *bufio.Writer, value int8) error {
 	if value != 0 {
-		if state.numberOfZeros != 0 {
+		if state.numberOfZeros > inlineZeros {
 			if err := state.flush(writer); err != nil {
 				return err
 			}
+		// } else if state.numberOfZeros == 1 {
+		} else {
+		 for range state.numberOfZeros {
+				state.nonZeros = append(state.nonZeros, 0)
+			}
+			state.numberOfZeros = 0
 		}
 		state.nonZeros = append(state.nonZeros, value)
 	} else {
