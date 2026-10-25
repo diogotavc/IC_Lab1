@@ -18,7 +18,7 @@ import (
 const inlineZeros = 1
 
 func main() {
-	chunkSizeArg := flag.Int("block-size", 8192, "set encoder block size")
+	chunkSizeArg := flag.Int("block-size", 2048, "set encoder block size")
 	flag.Parse()
 	if *chunkSizeArg < 1 {
 		panic("block size must be at least 1")
