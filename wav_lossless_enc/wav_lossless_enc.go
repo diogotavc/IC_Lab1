@@ -161,7 +161,7 @@ func huffmanMethod(bufferData []int, node *BinaryTreeNode) []byte { //helped by 
 
 func bufferSlicing(bufferData []int) [][]int {
 	var blocks [][]int
-	for start := 0; start <= len(bufferData); start += blockSize {
+	for start := 0; start < len(bufferData); start += blockSize {
 		end := min(start+blockSize, len(bufferData))
 		blocks = append(blocks, bufferData[start:end])
 	}
