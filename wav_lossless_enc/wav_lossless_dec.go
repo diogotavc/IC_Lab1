@@ -64,6 +64,21 @@ func main() {
 	}
 	differential := flags&flagDifferential != 0
 	slicing := flags&flagSlicing != 0
-	fmt.Printf("Channels: %v\nBit depth: %v\nSampling rate: %v\nNumber of frames: %v\nDifferential: %v\nSlicing: %v\n",
-		numChannels, bitDepth, samplingRate, numFrames, differential, slicing)
+	var blockSize uint32
+	if err := binary.Read(bufReader, binary.LittleEndian, &blockSize); err != nil {
+		panic(fmt.Sprintf("error while reading block size: %v", err))
+	}
+	if slicing && blockSize == 0 {
+		panic("slicing flag set but block size is 0")
+	}
+	fmt.Printf("Channels: %v\nBit depth: %v\nSampling rate: %v\nNumber of frames: %v\nDifferential: %v\nSlicing: %v\nBlock size: %v\n",
+		numChannels, bitDepth, samplingRate, numFrames, differential, slicing, blockSize)
+
+	totalSamples := numFrames * uint64(numChannels)
+	samplesPerBlock := totalSamples
+	if slicing {
+		samplesPerBlock = uint64(blockSize)
+	}
+
+	_ = samplesPerBlock
 }

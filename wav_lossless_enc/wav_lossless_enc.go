@@ -25,6 +25,7 @@ type fileHeader struct {
 	SampleRate  uint32
 	NumFrames   uint64
 	Flags       uint8
+	BlockSize   uint32
 }
 
 type huffmanCode struct {
@@ -288,6 +289,9 @@ func main() {
 		SampleRate:  uint32(buffer.Format.SampleRate),
 		NumFrames:   uint64(len(buffer.Data) / numChannels),
 		Flags:       flags,
+	}
+	if *blockFlag {
+		header.BlockSize = blockSize
 	}
 
 	data := buffer.Data
