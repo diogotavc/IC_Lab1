@@ -5,18 +5,14 @@ use std::fs::File;
 use std::io::Write;
 
 fn calculate_entropy(counts: &[usize]) -> f64 {
-    let sum = counts.iter().sum::<usize>() as f64;
-    let mut h = 0.0;
-
-    for &c in counts {
-        if c == 0 {
-            continue;
-        }
-        let p = c as f64 / sum;
-        h -= p * p.log2();
-    }
-
-    h
+    let total = counts.iter().sum::<usize>() as f64;
+    -counts
+        .iter()
+        .copied()
+        .filter(|&c| c > 0)
+        .map(|c| c as f64 / total)
+        .map(|c| c * c.log2())
+        .sum::<f64>()
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
