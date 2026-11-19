@@ -1,2 +1,3 @@
 [workspace]
+members = ["img_hist"]
 resolver = "3"

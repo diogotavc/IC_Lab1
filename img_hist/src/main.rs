@@ -1,31 +1,28 @@
-//use std::collections::HashMap;
 use std::error::Error;
-//use std::hash::Hash;
-// use std::{env, ffi::OsStr, path::Path};
-use std::{array, env};
-//use std::io::Cursor;
-use image::{DynamicImage, ImageReader, Luma, Rgb};
+use std::{env};
+use image::{ImageReader, Luma, Rgb};
 use std::fs::File;
 use std::io::Write;
-//use image::GenericImageView;
 
-fn entropy() -> Result<u32, Box<dyn Error>> {
-    Ok(0)
+fn calculate_entropy(counts: &[usize]) -> f64 {
+    let sum = counts.iter().sum::<usize>() as f64;
+    let mut h = 0.0;
+
+    for &c in counts {
+        if c == 0 {
+            continue;
+        }
+        let p = c as f64 / sum;
+        h -= p * p.log2();
+    }
+
+    h
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
-    // dbg!(&args[1]);
-
-    // if Path::new(&args[1]).extension() == Some(OsStr::new("raw")) {
-        
-    // }
     let img = ImageReader::open(&args[1])?.decode()?;
-    //let mut file = File::create("output.txt")?;
-    //writeln!(&mut file, "{:?}", img)?;
-    //println!("dimensions: {:?}", img.dimensions());
-    //println!("color: {:?}", img.color());
-    // println!("{:?}", img);
+
     match img {
         image::DynamicImage::ImageLuma8(image_buffer) => {
             let mut counts = [0_usize; 256];
@@ -34,6 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             let mut file = File::create("lumaChannel8.txt")?;
             writeln!(&mut file, "{:?}", counts)?;
+            println!("{:?}", calculate_entropy(&counts));
         },
         image::DynamicImage::ImageLuma16(image_buffer) => {
             let mut counts = [0_usize; 0x10000];
@@ -42,6 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             let mut file = File::create("lumaChannel16.txt")?;
             writeln!(&mut file, "{:?}", counts)?;
+            println!("{:?}", calculate_entropy(&counts));
         },
         image::DynamicImage::ImageRgb8(image_buffer) => {
             let mut counts_r = [0_usize; 256];
@@ -54,10 +53,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             let mut file = File::create("RChannel8.txt")?;
             writeln!(&mut file, "{:?}", counts_r)?;
+            println!("{:?}", calculate_entropy(&counts_r));
             file = File::create("GChannel8.txt")?;
             writeln!(&mut file, "{:?}", counts_g)?;
+            println!("{:?}", calculate_entropy(&counts_g));
             file = File::create("BChannel8.txt")?;
             writeln!(&mut file, "{:?}", counts_b)?;
+            println!("{:?}", calculate_entropy(&counts_b));
         },
         image::DynamicImage::ImageRgb16(image_buffer) => {
             let mut counts_r = [0_usize; 0x10000];
@@ -70,14 +72,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             let mut file = File::create("RChannel16.txt")?;
             writeln!(&mut file, "{:?}", counts_r)?;
+            println!("{:?}", calculate_entropy(&counts_r));
             file = File::create("GChannel16.txt")?;
             writeln!(&mut file, "{:?}", counts_g)?;
+            println!("{:?}", calculate_entropy(&counts_g));
             file = File::create("BChannel16.txt")?;
             writeln!(&mut file, "{:?}", counts_b)?;
+            println!("{:?}", calculate_entropy(&counts_b));
         },
         _ => panic!("unsupported image format"),
     }
 
     Ok(())
 }
-
